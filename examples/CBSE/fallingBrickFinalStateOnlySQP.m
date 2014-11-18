@@ -10,7 +10,7 @@ plant = RigidBodyManipulator(fullfile(getDrakePath,'systems','plants','test','Fa
 warning(w);
 x0 = [0;0;2.0;0.1*randn(3,1);zeros(6,1)];
 
-N=11; tf=1.0;
+N=11; tf=2.0;
 
 plant_ts = TimeSteppingRigidBodyManipulator(plant,tf/(N-1));
 plant_ts = plant_ts.compile();
@@ -45,7 +45,7 @@ for i=1:length(scale_sequence)
 %   snprint('snopt.out');
   
   % final conditions constraint
-  %prog = addStateConstraint(prog,ConstantConstraint(x0),1);
+ % prog = addStateConstraint(prog,ConstantConstraint(x0),1);
   prog = addStateConstraint(prog,ConstantConstraint(xf),N);
   
   if i == 1,
