@@ -2,7 +2,7 @@ function contactImplicitBrick(visualize,position_tol,velocity_tol)
 % tests that the contact implicit trajectory optimization can reproduce a
 % simulation of the falling brick
 rng(0)
-if nargin < 1, visualize = false; end
+if nargin < 1, visualize = true; end
 if nargin < 2, position_tol = 1.5e-2; end
 if nargin < 3, velocity_tol = 1e-1; end
 
