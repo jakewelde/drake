@@ -162,7 +162,7 @@ classdef DirectTrajectoryOptimization < NonlinearProgram
         obj = obj.addConstraint(constraint,cstr_inds);
       end
     end
-
+    
     function obj = addTrajectoryDisplayFunction(obj,display_fun)
       % add a dispay function that gets called on every iteration of the
       % algorithm

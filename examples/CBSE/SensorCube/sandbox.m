@@ -36,7 +36,7 @@ times = VICON_rlg_cbse_brick(:, 1).';
 % have, though we ain't fair from it
 times = linspace(times(1), times(end), length(times));
 times = (times - times(1))/1000000;
-tstart = 7.5; tend = 7.9;
+tstart = 7.5; tend = 9.0;
 inds = times > tstart & times < tend;
 times = times(inds);
 poses = zeros(12, sum(inds));

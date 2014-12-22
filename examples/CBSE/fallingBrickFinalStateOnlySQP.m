@@ -8,9 +8,9 @@ options.floating = true;
 w = warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
 plant = RigidBodyManipulator(fullfile(getDrakePath,'systems','plants','test','FallingBrickContactPoints.urdf'),options);
 warning(w);
-x0 = [0;0;1.0; rand(3, 1); 0;0;4.9; zeros(3, 1)];
+x0 = [0;0;1.0; rand(3, 1); 0;0;4.9; 2*rand(3, 1)];
 
-N=11; tf=1.0;
+N=10; tf=1.25;
 
 plant_ts = TimeSteppingRigidBodyManipulator(plant,tf/(N-1));
 plant_ts = plant_ts.compile();
@@ -27,8 +27,8 @@ end
 options = struct();
 options.integration_method = ContactImplicitTrajectoryOptimization.MIXED;
 
-scale_sequence = [1;0.01; .001;0];
-
+scale_sequence = [1; 0.5; 0.1; 0.01; .001;0];
+  tic
 for i=1:length(scale_sequence)
   scale = scale_sequence(i)
 
@@ -47,19 +47,21 @@ for i=1:length(scale_sequence)
   % final conditions constraint
  % prog = addStateConstraint(prog,ConstantConstraint(x0),1);
   prog = addStateConstraint(prog,ConstantConstraint(xf),N);
+  %prog = prog.addStateCost(FunctionHandleObjective(12, ...
+  %        @(x_inp) norm(x_inp-xf), -1), N);
   
   if i == 1,
     % start with weak guess
-    traj_init.x = PPTrajectory(foh([0,tf],[x0,xf]));
+    traj_init.x = PPTrajectory(foh([0,tf],[xf,xf]));
   else
     traj_init.x = xtraj;
     traj_init.l = ltraj;
   end
-  tic
-  [xtraj,utraj,ltraj,~,z,F,info] = solveTraj(prog,tf,traj_init);
-  toc
-end
 
+  [xtraj,utraj,ltraj,~,z,F,info] = solveTraj(prog,tf,traj_init);
+
+end
+  toc
 if visualize
   v.playback(xtraj);
 end

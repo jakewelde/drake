@@ -21,6 +21,8 @@ classdef SLAMThing < MIMODrakeSystem
     active_collision_options;
     nContactForces; 
     
+    eval_time;
+    
   end
   
   methods
@@ -32,8 +34,13 @@ classdef SLAMThing < MIMODrakeSystem
       input_frame = getOutputFrame(r);
       output_frame = getOutputFrame(r);
       
+      output_frame = {r.getStateFrame, r.getOutputFrame.getFrameByName('brickIMU'), r.getStateFrame};
+      output_frame = MultiCoordinateFrame(output_frame);
+      
       obj = obj@MIMODrakeSystem(0,0,input_frame,output_frame,true,true);
       obj = setInputFrame(obj,input_frame);
+
+      %obj = obj.setNumOutputs(length(output_frame.getCoordinateNames));
       obj = setOutputFrame(obj,output_frame);
       
       % should take from options
@@ -48,6 +55,8 @@ classdef SLAMThing < MIMODrakeSystem
       obj.last_sol = SharedDataHandle([]);
       obj.last_R = SharedDataHandle([]);
       obj.last_d = SharedDataHandle([]);
+      
+      obj.eval_time = SharedDataHandle([]);
       
       % Store robot
       obj.r = r;
@@ -144,14 +153,14 @@ classdef SLAMThing < MIMODrakeSystem
         [phi,normal,~,~,~,~,~,~,nc,D,dnc,dD] = obj.r.contactConstraints(state_hist(1:6, end),false, obj.active_collision_options);
         % construct J and dJ from nc,D,dnc, and dD so they relate to the
         % lambda vector
-        J = zeros(m,6);
-        J(1:2+obj.nD:end,:) = n;
-        dJ = zeros(m*6,6);
-        dJ(1:2+obj.nD:end,:) = dnc;
-        for j=1:length(D),
-          J(1+j:2+obj.nD:end,:) = D{j};
-          dJ(1+j:2+obj.nD:end,:) = dD{j};
-        end
+%         J = zeros(m,6);
+%         J(1:2+obj.nD:end,:) = n;
+%         dJ = zeros(m*6,6);
+%         dJ(1:2+obj.nD:end,:) = dnc;
+%         for j=1:length(D),
+%           J(1+j:2+obj.nD:end,:) = D{j};
+%           dJ(1+j:2+obj.nD:end,:) = dD{j};
+%         end
           
         %[~,Gnext] = obj.r.manipulatorDynamics(state_hist(1:6, n),zeros(6, 1));
         offset = nX_per*(n-2);
@@ -161,7 +170,7 @@ classdef SLAMThing < MIMODrakeSystem
         manip_constraint(:, nX_per+7+offset:nX_per+12+offset) = Hnext;
         manip_constraint(:, 7+offset:12+offset) = -Hnext;
         % -J.' * contact forces
-        manip_constraint(:, nX_per+13+offset:nX_per+12+m+offset) = -J.';
+        %manip_constraint(:, nX_per+13+offset:nX_per+12+m+offset) = -J.';
         
         manip_equality = manip_equality - obj.dt * Cnext;%; - obj.dt*Gnext;
         
@@ -226,7 +235,7 @@ classdef SLAMThing < MIMODrakeSystem
       % Decision variables: given N time steps so far,
       % N*12 (x and x* states) %% (later) + m*N (m contact forces)
       N = size(state_hist, 2);
-      m = obj.nContactForces;
+      m = 0; %obj.nContactForces;
       nX = N*12 + m*N;
       % Constraints:
       % (N-1)*12 + N*6 (6 dynamic eqs, 6 manip eqs, 6 measurement)
@@ -386,6 +395,7 @@ classdef SLAMThing < MIMODrakeSystem
     end
     
     function varargout=mimoOutput(obj,t,~,varargin)
+      tic
       t_hist = obj.t_history.getData;
       % some logic to skip the first time we're called when t=0,
       % but remember the second time (when the state is properly set up)
@@ -408,7 +418,17 @@ classdef SLAMThing < MIMODrakeSystem
         obj.doISAM();
         
       end
-      varargout = varargin;
+      last_sol = obj.last_sol.getData();
+      if (isempty(last_sol))
+        last_sol = zeros(length(obj.getOutputFrame.getFrameByNum(3).getCoordinateNames), 1);
+      else
+        last_sol = full(last_sol(end-11:end));
+      end
+      varargout = [varargin last_sol];
+      tim = toc
+      
+      obj.eval_time.setData([obj.eval_time.getData; tim]);
+      obj.eval_time.getData
     end
   end
   
