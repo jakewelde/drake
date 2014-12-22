@@ -8,9 +8,9 @@ options.floating = true;
 w = warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
 plant = RigidBodyManipulator(fullfile(getDrakePath,'systems','plants','test','FallingBrickContactPoints.urdf'),options);
 warning(w);
-x0 = [0;0;1.0; rand(3, 1); 0;2;4.9; 1; 1; 1];
 
-N=100; tf=3.5;
+x0 = [0;0;1.0; rand(3, 1); 0;0;4.9; rand(3, 1)];
+N=10; tf=1.25;
 
 plant_ts = TimeSteppingRigidBodyManipulator(plant,tf/(N-1));
 feedback = FullStateFeedbackSensor();
@@ -18,11 +18,13 @@ plant_ts = addSensor(plant_ts, feedback);
 body = 2;
 xyz = [0; 0; 0];
 rpy = zeros(3, 1); %nonzero rpy not supported in imu
-imu = RigidBodyInertialMeasurementUnit(plant_ts, body, xyz, rpy);
+%imu = RigidBodyInertialMeasurementUnit(plant_ts, body, xyz, rpy);
+imu = TimeSteppingInertialMeasurementUnit(plant_ts, body, xyz, rpy);
 plant_ts = plant_ts.addSensor(imu);
 plant_ts = plant_ts.compile();
 w = warning('off','Drake:TimeSteppingRigidBodyManipulator:ResolvingLCP');
-xtraj_ts = simulate(plant_ts,[0 tf],x0);
+x0WithSensor = [x0; x0; x0];
+xtraj_ts = simulate(plant_ts,[0 tf],x0WithSensor);
 x0 = xtraj_ts.eval(0);
 xf = xtraj_ts.eval(xtraj_ts.tspan(end));
 warning(w);
@@ -31,11 +33,23 @@ if visualize
   v.playback(xtraj_ts);
 end
 
+%%
+imu_outs = [];
+for i=1:N
+  out = xtraj_ts.eval(xtraj_ts.tt(i));
+  out = out(16:18);
+  imu_outs = [imu_outs out];
+end
+figure;
+plot(imu_outs.')
+%%
+
 options = struct();
 options.integration_method = ContactImplicitTrajectoryOptimization.MIXED;
 
-scale_sequence = [10; 1.0; 0.5; 0.1; 0.01; .001;0];
-
+scale_sequence = [1.0; 0.5; 0.1; 0.01; .001; 0];
+w = warning('off','Drake:FunctionHandleTrajectory');
+tic
 for i=1:length(scale_sequence)
   scale = scale_sequence(i)
   
@@ -52,30 +66,33 @@ for i=1:length(scale_sequence)
   %   snprint('snopt.out');
   
   % final conditions constraint
-  prog = addStateConstraint(prog,ConstantConstraint(x0(1:12)),1);
-  %prog = addStateConstraint(prog,ConstantConstraint(xf(1:12)),N);
-  %
+  %prog = addStateConstraint(prog,ConstantConstraint(x0(1:12)),1);
+  prog = addStateConstraint(prog,ConstantConstraint(xf(1:12)),N);
+  %prog = prog.addStateCost(FunctionHandleObjective(12, ...
+  %        @(x_inp) norm(x_inp(1:12)-xf(1:12)), -1), N);
+
   % Add in IMU constraints
   ts = getBreaks(xtraj_ts);
   dt = (xtraj_ts.tspan(end) - xtraj_ts.tspan(1))/(N-1);
-  for n=1:N
+  for n=3:N
     % -> given J_imu at x_n, J_imu(x_n) * (x_n+1 - x_n) + J0 = z_n+1
     imu_constraint = zeros(6, 24);
     imu_equality = zeros(6, 1);
     x = xtraj_ts.eval(ts(n));
+    xlast = xtraj_ts.eval(ts(n-1));
     %xnext = xtraj_ts.eval(ts(n+1));
     ximu = x(13:end);
-    %ximunext = xnext(13:end);
+    %ximunext = xnext(13:enupdated);
     x = x(1:12);
     %xnext = xnext(1:12);
-    % Numerical:
+%     Numerical:
 %     out_norm = imu.output(plant_ts.getManipulator,0,double(x), []);
 %     out_num = zeros(6, length(x));
 %     eps = 1E-6;
 %     add = x*0;
 %     for j=1:length(x)
 %       add = add*0;
-%       add(j) = eps;
+%       add(j) = eps;20
 %       out_this = (imu.output(plant_ts.getManipulator,0,double(x+add), []) - out_norm)/eps;
 %       acc = out_this(8:10);
 %       gyro = out_this(5:7);
@@ -95,27 +112,26 @@ for i=1:length(scale_sequence)
 %     imu_equality(4:6) = (ximunext(5:7) - ximu(5:7));
 %     delta = 0.1*scale;
 %     prog = prog.addStateConstraint(LinearConstraint(imu_equality-delta,imu_equality+delta,imu_constraint), {n:n+1});  
-    
-    delta = 0.1*scale;
-    prog = prog.addStateConstraint(FunctionHandleConstraint(ximu-delta,ximu+delta, 12, ...
-                                  @(x_inp) imu.output(plant_ts.getManipulator,0,double(x_inp),[])), n);
+     prog = prog.addStateCost(FunctionHandleObjective(24, ...
+                                   @(x_inp_last, x_inp)  norm(imu.output(plant_ts,0,0,[double(x_inp); double(x_inp); double(x_inp_last)],[])-ximu), -1), [n-1, n]);
   end
   
   clear traj_init;
   if i == 1,
-    traj_init.x = PPTrajectory(foh([0,tf],[x0(1:12),x0(1:12)]));
+    traj_init.x = PPTrajectory(foh([0,tf],[x0(1:12),xf(1:12)]));
   else
     traj_init.x = xtraj;
     traj_init.l = ltraj;
   end
-  tic
+  %traj_init.x = xtraj_seed;
+  w = warning('off','Drake:TaylorVar:DoubleConversion');
   [xtraj,utraj,ltraj,~,z,F,info] = solveTraj(prog,tf,traj_init);
-  toc
-end
 
+end
+  toc
+  
 if visualize
   %%
   v.playback(xtraj_ts);
   v.playback(xtraj);
 end
-
