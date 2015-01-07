@@ -3,7 +3,7 @@ classdef TimeSteppingInertialMeasurementUnit < TimeSteppingRigidBodySensorWithSt
   % from states over time
   
   methods
-    function obj = TimeSteppingInertialMeasurementUnit(manip,body,xyz,rpy)
+    function obj = TimeSteppingInertialMeasurementUnit(manip,body,xyz,rpy,noise)
       typecheck(body,'double');  % must be a body index
       
       if isa(manip,'PlanarRigidBodyManipulator')
@@ -17,12 +17,14 @@ classdef TimeSteppingInertialMeasurementUnit < TimeSteppingRigidBodySensorWithSt
         else sizecheck(xyz,[3,1]); end
         if (nargin<4) rpy=zeros(3,1);
         else sizecheck(rpy,[3,1]); end
+        if (nargin<5) noise=0.0; end
       end      
 
       if (any(rpy)) error('Drake:TimeSteppingInertialMeasurementUnit:RPYNotImplemented', 'non-zero rpy not supported yet'); end  % but it wouldn't be too hard (see ContactForceTorque)
       
       obj.body = body;
       obj.xyz = xyz;
+      obj.noise = noise;
       
       warning('the IMU outputs have not been tested yet (due to bug 1728)'); 
     end  
@@ -70,7 +72,7 @@ classdef TimeSteppingInertialMeasurementUnit < TimeSteppingRigidBodySensorWithSt
         
       y = [omega_body; ...
         accel_body ];
-      
+      y = y + randn(size(y))*obj.noise/2;
     end
     
     function fr = constructFrame(obj,tsmanip)
@@ -103,6 +105,7 @@ classdef TimeSteppingInertialMeasurementUnit < TimeSteppingRigidBodySensorWithSt
   properties
     body
     xyz
+    noise
   end
   
 end
