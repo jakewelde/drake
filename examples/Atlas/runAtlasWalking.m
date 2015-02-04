@@ -63,6 +63,19 @@ lfoot_navgoal(1:3) = lfoot_navgoal(1:3) + R*[0;0.13;0];
 goal_pos = struct('right', rfoot_navgoal, 'left', lfoot_navgoal);
 footstep_plan = r.planFootsteps(x0(1:nq), goal_pos);
 
+region_order = [];
+theta_step = pi/12;
+for i=1:16
+  pos_left = [0.13*sin(theta_step*i); 0.13*cos(theta_step*i); 0; 0; 0; -theta_step*i];
+  pos_right = [0.13*sin(theta_step*i+pi); 0.13*cos(theta_step*i+pi); 0; 0; 0; -theta_step*i];
+  footsteps(2*i-1, 1) = Footstep(pos_left, 2*i-1, -1, 1, zeros(6, 1), [], NaN, []);
+  footsteps(2*i, 1) = Footstep(pos_right, 2*i, -2, 1, zeros(6, 1), [], NaN, []);
+  region_order(2*i-1) = 1;
+  region_order(2*1) = 1;
+end
+footstep_plan.params.max_num_steps = 50;
+footstep_plan.footsteps = footsteps;
+footstep_plan.region_order = region_order;
 walking_plan_data = r.planWalkingZMP(x0(1:r.getNumPositions()), footstep_plan);
 
 traj = atlasUtil.simulateWalking(r, walking_plan_data, example_options.use_mex, false, example_options.use_bullet, example_options.use_angular_momentum, true);
