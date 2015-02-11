@@ -4,11 +4,14 @@ classdef QPController < MIMODrakeSystem
   % optionally supports including angular momentum and body acceleration
   % costs/constraints.
   methods
-  function obj = QPController(r,body_accel_input_frames,controller_data,options)
+  function obj = QPController(r,body_accel_input_frames,external_force_input_frames,controller_data,options)
     % @param r rigid body manipulator instance
     % @param body_accel_input_frames cell array or coordinate frames for
     %    desired body accelerations. coordinates are ordered as:
     %    [body_index, xdot, ydot, zdot, roll_dot, pitch_dot, yaw_dot]
+    % @param external_force_frames cell array or coordinate frames for
+    %    inputting external forces to the dynamics constraints (e.g., for
+    %    when walking while carrying objects)
     % @param controller_data QPControllerData object containing the matrices that
     % define the underlying linear system, the ZMP trajectory, Riccati
     % solution, etc.
@@ -17,7 +20,7 @@ classdef QPController < MIMODrakeSystem
     typecheck(r,'Biped');
     typecheck(controller_data,'QPControllerData');
 
-    if nargin>3
+    if nargin>4
       typecheck(options,'struct');
     else
       options = struct();
@@ -25,7 +28,7 @@ classdef QPController < MIMODrakeSystem
 
     qddframe = controller_data.acceleration_input_frame; % input frame for desired qddot
 
-    input_frame = MultiCoordinateFrame({r.getStateFrame,qddframe,atlasFrames.FootContactState,body_accel_input_frames{:}});
+    input_frame = MultiCoordinateFrame({r.getStateFrame,qddframe,atlasFrames.FootContactState,body_accel_input_frames{:},external_force_input_frames{:}});
 
     % whether to output generalized accelerations AND inputs (u)
     if ~isfield(options,'output_qdd')
@@ -48,6 +51,7 @@ classdef QPController < MIMODrakeSystem
     obj.numq = getNumPositions(r);
     obj.controller_data = controller_data;
     obj.n_body_accel_inputs = length(body_accel_input_frames);
+    obj.n_external_force_inputs = length(external_force_input_frames);
 
     if isfield(options,'dt')
       % controller update rate
@@ -332,6 +336,14 @@ classdef QPController < MIMODrakeSystem
       act_idx = 7:nq; % indices for actuated dofs
 
       [H,C,B] = manipulatorDynamics(r,q,qd);
+
+      for ii=1:obj.n_external_force_inputs
+        frame_input = varargin{ii+obj.n_body_accel_inputs+3};
+        frame_ind = frame_input(1);
+        force_torque = frame_input(2:7);
+        [~,Jb] = forwardKin(r,kinsol,frame_ind,[0;0;0],1);
+        C = C + Jb'*force_torque;
+      end
 
       H_float = H(float_idx,:);
       C_float = C(float_idx);
@@ -713,6 +725,7 @@ classdef QPController < MIMODrakeSystem
     output_qdd = false;
     body_accel_input_weights; % array of doubles, negative values signal constraints
     n_body_accel_inputs;
+    n_external_force_inputs;
     body_accel_bounds;
     n_body_accel_bounds;
   end

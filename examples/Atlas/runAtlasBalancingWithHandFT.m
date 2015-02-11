@@ -1,4 +1,4 @@
-function runAtlasBalancing(use_mex)
+function runAtlasBalancingWithHandFT(use_mex)
 
 if ~checkDependency('gurobi')
   warning('Must have gurobi installed to run this example');
@@ -20,9 +20,16 @@ warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits')
 
 options.floating = true;
 options.dt = 0.002;
+options.num_external_force_frames = 1;
 r = Atlas('urdf/atlas_minimal_contact.urdf',options);
+options_hand = options;
+options_hand.hands = 'robotiq_weight_only'; % so the actual system being controlled will have
+% an extra kg or two on the right hand
+r_actual = Atlas('urdf/atlas_minimal_contact.urdf', options_hand);
 r = r.removeCollisionGroupsExcept({'heel','toe'});
+r_actual = r_actual.removeCollisionGroupsExcept({'heel', 'toe'});
 r = compile(r);
+r_actual = compile(r_actual);
 
 nq = getNumPositions(r);
 
@@ -81,8 +88,10 @@ else
   options.W_kdot = zeros(3);
 end
 
-options.use_mex = 2;
-qp = QPController(r,{},{},ctrl_data,options);
+options.use_mex = 0;
+% add the hand ft frame to right hand
+r_hand_body = findLinkId(r,'r_hand');
+qp = QPController(r,{},{atlasFrames.ExternalForceTorque()},ctrl_data,options);
 clear options;
 
 % feedback QP controller with atlas
@@ -90,9 +99,11 @@ ins(1).system = 1;
 ins(1).input = 2;
 ins(2).system = 1;
 ins(2).input = 3;
+ins(3).system = 1;
+ins(3).input = 4;
 outs(1).system = 2;
 outs(1).output = 1;
-sys = mimoFeedback(qp,r,[],[],ins,outs);
+sys = mimoFeedback(qp,r_actual,[],[],ins,outs);
 clear ins;
 
 % feedback foot contact detector with QP/atlas
@@ -101,6 +112,8 @@ options.contact_threshold = 0.002;
 fc = FootContactBlock(r,ctrl_data,options);
 ins(1).system = 2;
 ins(1).input = 1;
+ins(2).system = 2;
+ins(2).input = 3;
 sys = mimoFeedback(fc,sys,[],[],ins,outs);
 clear ins;
 
@@ -109,7 +122,19 @@ options.use_ik = false;
 pd = IKPDBlock(r,ctrl_data,options);
 ins(1).system = 1;
 ins(1).input = 1;
+ins(2).system = 2;
+ins(2).input = 2;
 sys = mimoFeedback(pd,sys,[],[],ins,outs);
+clear ins;
+
+% set up a faked force/torque to one of the hands
+rhand_idx = findLinkId(r,'r_hand');
+% this could be some much better if we actually did the right math
+ft = ConstantTrajectory([rhand_idx;0;0;0;-2;0;0]);
+ft = ft.setOutputFrame(atlasFrames.ExternalForceTorque);
+ins(1).system = 2;
+ins(1).input = 1;
+sys = mimoCascade(ft,sys,[],ins,outs);
 clear ins;
 
 qt = QTrajEvalBlock(r,ctrl_data);

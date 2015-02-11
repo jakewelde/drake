@@ -8,13 +8,16 @@ classdef AtlasQPController < QPController
     % @param body_accel_input_frames cell array or coordinate frames for
     %    desired body accelerations. coordinates are ordered as:
     %    [body_index, xdot, ydot, zdot, roll_dot, pitch_dot, yaw_dot]
+    % @param external_force_frames cell array or coordinate frames for
+    %    inputting external forces to the dynamics constraints (e.g., for
+    %    when walking while carrying objects)
     % @param controller_data QPControllerData object containing the matrices that
     % define the underlying linear system, the ZMP trajectory, Riccati
     % solution, etc.
     % @param options structure for specifying objective weights, slack
     % bounds, etc.
 
-    obj = obj@QPController(r,body_accel_input_frames,controller_data,options);
+    obj = obj@QPController(r,body_accel_input_frames,external_force_input_frames,controller_data,options);
     
     if isfield(options,'debug')
       typecheck(options.debug,'logical');
