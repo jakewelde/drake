@@ -19,9 +19,6 @@ classdef Atlas < TimeSteppingRigidBodyManipulator & Biped
       if ~isfield(options,'hands')
         options.hands = 'none';
       end
-      if ~isfield(options, 'num_external_force_frames')
-        options.num_external_force_frames = 0;
-      end
 
       w = warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits');
       
@@ -279,9 +276,12 @@ classdef Atlas < TimeSteppingRigidBodyManipulator & Biped
         motion_frames = {pelvis_control_block.getOutputFrame};
       end
       
+      if ~isfield(options, 'num_external_force_frames')
+        options.num_external_force_frames = 0;
+      end
       external_force_frames = cell(1,options.num_external_force_frames);
       for i=1:options.num_external_force_frames
-        external_force_frames{i} = ExternalForceTorque();
+        external_force_frames{i} = atlasFrames.ExternalForceTorque();
       end
 
       qp = AtlasQPController(obj,motion_frames,external_force_frames,controller_data,options);

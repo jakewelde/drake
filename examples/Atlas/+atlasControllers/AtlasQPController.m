@@ -3,7 +3,7 @@ classdef AtlasQPController < QPController
   % for (time-varing) linear COM/ZMP dynamics. Includes logic specific to
   % atlas/bipeds for raising the heel while walking.
   methods
-  function obj = AtlasQPController(r,body_accel_input_frames,controller_data,options)
+  function obj = AtlasQPController(r,body_accel_input_frames,external_force_input_frames,controller_data,options)
     % @param r rigid body manipulator instance
     % @param body_accel_input_frames cell array or coordinate frames for
     %    desired body accelerations. coordinates are ordered as:
@@ -206,7 +206,15 @@ classdef AtlasQPController < QPController
       act_idx = 7:nq; % indices for actuated dofs
 
       [H,C,B] = manipulatorDynamics(r,q,qd);
-
+      
+      for ii=1:obj.n_external_force_inputs
+        frame_input = varargin{ii+obj.n_body_accel_inputs+3};
+        frame_ind = frame_input(1);
+        force_torque = frame_input(2:7);
+        [~,Jb] = forwardKin(r,kinsol,frame_ind,[0;0;0],1);
+        C = C + Jb'*force_torque;
+      end
+      
       H_float = H(float_idx,:);
       C_float = C(float_idx);
 
