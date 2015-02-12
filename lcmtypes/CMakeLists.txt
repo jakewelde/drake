@@ -7,6 +7,7 @@ lcmtypes_build(LCM_TYPES
 			 lcmt_robot_state.lcm
 			 lcmt_scope_data.lcm
 			 lcmt_viewer_command.lcm
+			 lcmt_external_force_torque.lcm
 			 )
 
 #add_lcmtype(lcmt_drake_signal.lcm)

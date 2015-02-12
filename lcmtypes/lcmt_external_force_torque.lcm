@@ -1,0 +1,14 @@
+package drake;
+
+struct lcmt_external_force_torque
+{
+    int64_t  timestamp;
+    int64_t  body_or_frame_id; // which body or frame this is being exerted on
+    double   fx;
+    double   fy;
+    double   fz;
+    double   tx;
+    double   ty;
+    double   tz;
+}
+

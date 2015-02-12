@@ -281,7 +281,7 @@ classdef Atlas < TimeSteppingRigidBodyManipulator & Biped
       end
       external_force_frames = cell(1,options.num_external_force_frames);
       for i=1:options.num_external_force_frames
-        external_force_frames{i} = atlasFrames.ExternalForceTorque();
+        external_force_frames{i} = ExternalForceTorque();
       end
 
       qp = AtlasQPController(obj,motion_frames,external_force_frames,controller_data,options);
