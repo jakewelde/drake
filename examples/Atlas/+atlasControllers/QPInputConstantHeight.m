@@ -98,6 +98,37 @@ classdef QPInputConstantHeight
       msg.param_set_name = obj.param_set_name;
     end
   end
+
+  methods (Static = true)
+    function obj = from_lcm(msg)
+      obj = atlasControllers.QPInputConstantHeight();
+      obj.timestamp = msg.timestamp / 1e6;
+      for f = fieldnames(obj.zmp_data)'
+        obj.zmp_data.(f{1}) = msg.zmp_data.(f{1});
+      end
+
+      for j = 1:msg.num_support_data
+        obj.support_data(j).body_id = msg.support_data(j).body_id;
+        obj.support_data(j).num_contact_pts = size(msg.support_data(j).contact_pts, 2);
+        obj.support_data(j).contact_pts = msg.support_data(j).contact_pts;
+        obj.support_data(j).support_logic_map = double(msg.support_data(j).support_logic_map);
+        obj.support_data(j).mu = msg.support_data(j).mu;
+        obj.support_data(j).contact_surfaces = msg.support_data(j).contact_surfaces;
+      end
+
+      for j = 1:msg.num_tracked_bodies
+        obj.body_motion_data(j).body_id = msg.body_motion_data(j).body_id;
+        obj.body_motion_data(j).ts = msg.body_motion_data(j).ts;
+        obj.body_motion_data(j).coefs = reshape(msg.body_motion_data(j).coefs, 6, 1, 4);
+      end
+      
+      obj.whole_body_data.num_positions = numel(msg.whole_body_data.q_des);
+      obj.whole_body_data.q_des = msg.whole_body_data.q_des;
+      obj.whole_body_data.num_constrained_dofs = length(msg.whole_body_data.constrained_dofs);
+      obj.whole_body_data.constrained_dofs = msg.whole_body_data.constrained_dofs;
+      obj.param_set_name = char(msg.param_set_name);
+    end
+  end
 end
 
 
