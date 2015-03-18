@@ -9,6 +9,7 @@ function runAtlasStepRecovery(perturbation, example_options)
 % @option use_angular_momentum
 % @options navgoal
 % 
+perturbation = [0.2; 0];
 
 checkDependency('gurobi');
 checkDependency('lcmgl');
@@ -145,6 +146,6 @@ function [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner
   % Put into its own function to make profiling easier
   recovery_plan = recovery_planner.solveBipedProblem(r, x0, zmpact);
   walking_plan_data = QPLocomotionPlan.from_point_mass_biped_plan(recovery_plan, r, x0);
-  walking_plan_data.qstar = xstar(1:nq);
+  %walking_plan_data.qstar = xstar(1:nq);
   % walking_plan_data = DRCWalkingPlanData.from_walking_plan_t(walking_plan_data.to_walking_plan_t()); 
 end

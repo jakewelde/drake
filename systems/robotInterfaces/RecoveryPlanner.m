@@ -7,6 +7,7 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
     dt = 0.05;
     max_foot_velocity = 2; % m / s
     STANCE_UPPER_BOUND = 2; % m, an upper bound on the width of the robot's stance, for mixed-integer constraint formulation
+    params; % cache cause they are tedious to produce, according to profiler
   end
 
   methods
@@ -33,6 +34,8 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
         obj.vars.qr.symb(:,end-1) == obj.vars.qr.symb(:,end),...
         obj.vars.ql.symb(:,end-1) == obj.vars.ql.symb(:,end),...
         ]);
+      
+      obj.params = sdpsettings('solver', 'gurobi', 'verbose', 1)
 
     end
 
@@ -118,7 +121,7 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
 
       % obj = obj.addSymbolicObjective(-.05 * sum(sum(obj.vars.contact.symb)));
 
-      obj = obj.solveYalmip(sdpsettings('solver', 'gurobi', 'verbose', 1));
+      obj = obj.solveYalmip(obj.params);
 
       sol = PointMassBipedPlan();
       sol.ts = obj.dt * (0:(obj.nsteps-1));
