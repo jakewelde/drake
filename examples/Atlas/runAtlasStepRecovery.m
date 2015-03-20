@@ -49,7 +49,7 @@ x0(nq + (1:2)) = x0(nq + (1:2)) + perturbation;
 v = r.constructVisualizer;
 v.display_dt = 0.001;
 
-recovery_planner = RecoveryPlanner([], []);
+recovery_planner = RecoveryPlanner([], [], false);
 
 zmpact = [];
 
@@ -71,7 +71,6 @@ for iter = 1:3
 
 
   ts = walking_plan_data.zmptraj.getBreaks();
-  T = ts(end);
 
   % plot walking traj in drake viewer
   lcmgl = drake.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton(),'walking-plan');
@@ -83,7 +82,7 @@ for iter = 1:3
     lcmgl.sphere([walking_plan_data.zmptraj.eval(ts(i));0], 0.01, 20, 20);
   end
   lcmgl.switchBuffers();
-  % keyboard()
+  keyboard()
 
   planeval = atlasControllers.AtlasPlanEval(r, walking_plan_data);
   control = atlasControllers.InstantaneousQPController(r, [], struct('use_mex', example_options.use_mex));
@@ -132,6 +131,7 @@ for iter = 1:3
     traj = traj.shiftTime(b(end)-breaks(1));
     combined_xtraj = combined_xtraj.append(traj);
   end
+  break;
 end
 
 combined_xtraj = combined_xtraj.setOutputFrame(r.getStateFrame());
@@ -144,8 +144,10 @@ end
 
 function [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner, r, x0, zmpact, xstar, nq)
   % Put into its own function to make profiling easier
-  recovery_plan = recovery_planner.solveBipedProblem(r, x0, zmpact);
+  t0 = tic();
+  recovery_plan = recovery_planner.solveBipedProblem(r, x0, zmpact, 0);
+  toc(t0);
   walking_plan_data = QPLocomotionPlan.from_point_mass_biped_plan(recovery_plan, r, x0);
-  %walking_plan_data.qstar = xstar(1:nq);
+  walking_plan_data.qstar = xstar(1:nq);
   % walking_plan_data = DRCWalkingPlanData.from_walking_plan_t(walking_plan_data.to_walking_plan_t()); 
 end
