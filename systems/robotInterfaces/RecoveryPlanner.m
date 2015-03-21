@@ -124,7 +124,7 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
       if use_symbolic
         [obj, solvertime, objval] = obj.solveYalmip(sdpsettings('solver', 'gurobi', 'verbose', 1));
       else
-        [obj, solvertime, objval] = obj.solveGurobi(struct('outputflag', 1));
+        [obj, solvertime, objval] = obj.solveGurobi(struct('outputflag', 0));
       end
       solvertime
       objval
@@ -144,7 +144,7 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
         obj_check = obj_check.addFootMotionObjective(false);
         obj_check = obj_check.addFinalPostureObjective(false);
 
-        [obj_check, solvertime_check, objval_check] = obj_check.solveGurobi(struct('outputflag', 1));
+        [obj_check, solvertime_check, objval_check] = obj_check.solveGurobi(struct('outputflag', 0));
         solvertime_check
         objval_check
         valuecheck(objval_check, objval, 1e-3);

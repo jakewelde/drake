@@ -3,7 +3,7 @@ function link_constraints = getLinkConstraints(obj, foot_origin_knots, zmptraj, 
 if nargin < 6
   options = struct();
 end
-options = applyDefaults(options, struct('pelvis_height_above_sole', obj.default_walking_params.pelvis_height_above_foot_sole, 'debug', true));
+options = applyDefaults(options, struct('pelvis_height_above_sole', obj.default_walking_params.pelvis_height_above_foot_sole, 'debug', false));
 
 link_constraints = struct('link_ndx',{}, 'pt', {}, 'ts', {}, 'poses', {}, 'dposes', {}, 'contact_break_indices', {}, 'coefs', {}, 'toe_off_allowed', {});
 
@@ -55,17 +55,13 @@ if options.debug
 end
 
 pelvis_reference_height = zeros(1,length(support_times));
+pelvis_height_above_foot_origin = zeros(1,length(support_times));
 
 lfoot_link_con_ind = [link_constraints.link_ndx]==obj.foot_body_id.left;
 rfoot_link_con_ind = [link_constraints.link_ndx]==obj.foot_body_id.right;
 lfoot_des = evaluateSplineInLinkConstraints(0,link_constraints,lfoot_link_con_ind);
 rfoot_des = evaluateSplineInLinkConstraints(0,link_constraints,rfoot_link_con_ind);
 pelvis_reference_height(1) = min(lfoot_des(3),rfoot_des(3));
-
-T = obj.getFrame(obj.foot_frame_id.right).T;
-% Torig * T = Tsole
-rfoot_sole_des = poseRPY2tform(rfoot_des) * T;
-pelvis_height_above_foot_origin = options.pelvis_height_above_sole + (rfoot_sole_des(3) - rfoot_des(3));
 
 for i=1:length(support_times)-1
   isDoubleSupport = any(supports(i).bodies==obj.foot_body_id.left) && any(supports(i).bodies==obj.foot_body_id.right);
@@ -75,7 +71,19 @@ for i=1:length(support_times)-1
     plot(support_times(i:i+1), 0.15 + 0.05*(isRightSupport|isDoubleSupport)*[1, 1], 'go:')
     plot(support_times(i:i+1), 0.15 + 0.05*(isLeftSupport|isDoubleSupport)*[1,1], 'ro:')
   end
-
+  
+  if (isRightSupport)
+    T = obj.getFrame(obj.foot_frame_id.right).T;
+    % Torig * T = Tsole
+    rfoot_sole_des = tform2poseRPY(poseRPY2tform(rfoot_des) * T);
+    pelvis_height_above_foot_origin(i) = options.pelvis_height_above_sole + (rfoot_sole_des(3) - rfoot_des(3));
+  else
+    T = obj.getFrame(obj.foot_frame_id.left).T;
+    % Torig * T = Tsole
+    lfoot_sole_des = tform2poseRPY(poseRPY2tform(lfoot_des) * T);
+    pelvis_height_above_foot_origin(i) = options.pelvis_height_above_sole + (lfoot_sole_des(3) - lfoot_des(3));
+  end
+  
   nextIsDoubleSupport = any(supports(i+1).bodies==obj.foot_body_id.left) && any(supports(i+1).bodies==obj.foot_body_id.right);
   nextIsRightSupport = ~any(supports(i+1).bodies==obj.foot_body_id.left) && any(supports(i+1).bodies==obj.foot_body_id.right);
   nextIsLeftSupport = any(supports(i+1).bodies==obj.foot_body_id.left) && ~any(supports(i+1).bodies==obj.foot_body_id.right);
@@ -107,7 +115,23 @@ for i=1:length(support_times)-1
     else
       pelvis_reference_height(i+1) = rfoot_des(3);
     end
+  else
+    % No support? Oh no!
+    pelvis_reference_height(i+1) = pelvis_reference_height(i);
   end
+end
+
+isRightSupport = ~any(supports(end).bodies==obj.foot_body_id.left) && any(supports(end).bodies==obj.foot_body_id.right);
+if (isRightSupport)
+  T = obj.getFrame(obj.foot_frame_id.right).T;
+  % Torig * T = Tsole
+  rfoot_sole_des = tform2poseRPY(poseRPY2tform(rfoot_des) * T);
+  pelvis_height_above_foot_origin(end) = options.pelvis_height_above_sole + (rfoot_sole_des(3) - rfoot_des(3));
+else
+  T = obj.getFrame(obj.foot_frame_id.left).T;
+  % Torig * T = Tsole
+  lfoot_sole_des = tform2poseRPY(poseRPY2tform(lfoot_des) * T);
+  pelvis_height_above_foot_origin(end) = options.pelvis_height_above_sole + (lfoot_sole_des(3) - lfoot_des(3));
 end
 
 % Now set the pelvis reference

@@ -38,20 +38,89 @@ r = compile(r);
 % set initial state to fixed point
 load(fullfile(getDrakePath,'examples','Atlas','data','atlas_fp.mat'));
 % xstar(r.getNumPositions() + (1:2)) = [0.3; 0.3];
+xstar = [   -0.0009
+    0.1605
+    0.8400
+   -0.0000
+   -0.0000
+    0.0017
+    0.0000
+    0.0001
+    0.0000
+    0.2700
+   -1.3300
+    2.0998
+    0.5000
+    0.0001
+   -0.0017
+   -0.1532
+   -0.5454
+    1.1058
+   -0.5604
+    0.1532
+    0.0000
+   -0.2700
+    1.3300
+    2.0998
+   -0.5000
+    0.0001
+    0.1437
+   -0.3041
+   -0.6931
+    1.4365
+   -0.2796
+    0.3373
+   -0.0000
+   -0.0218
+   -0.0040
+   -0.0118
+    0.0000
+    0.0000
+   -0.0000
+    0.0028
+    0.0000
+    0.0000
+    0.0000
+   -0.0000
+    0.0000
+   -0.0000
+    0.0000
+   -0.0000
+   -0.0028
+    0.0153
+   -0.0112
+    0.0102
+    0.0010
+   -0.0153
+   -0.0000
+    0.0000
+    0.0000
+   -0.0000
+   -0.0000
+    0.0000
+    0.2362
+   -0.0432
+   -0.4285
+    0.6805
+    0.3447
+    0.1395
+    0.0000
+   -0.0000];
 xstar = Point(r.getStateFrame(), xstar);
 % xstar.r_leg_hpy = -0.9;
 % xstar.r_leg_kny = 1.7;
 % xstar = double(xstar);
 x0 = xstar;
 nq = r.getNumPositions();
-x0(nq + (1:2)) = x0(nq + (1:2)) + perturbation;
+%x0(nq + (1:2)) = x0(nq + (1:2)) + perturbation;
 
 v = r.constructVisualizer;
 v.display_dt = 0.001;
 
-recovery_planner = RecoveryPlanner([], [], false);
+recovery_planner = RecoveryPlanner(10, 0.075, false);
 
-zmpact = [];
+zmpact = [0.0185
+    0.1509];
 
 combined_xtraj = [];
 
@@ -82,7 +151,7 @@ for iter = 1:3
     lcmgl.sphere([walking_plan_data.zmptraj.eval(ts(i));0], 0.01, 20, 20);
   end
   lcmgl.switchBuffers();
-  keyboard()
+  %keyboard()
 
   planeval = atlasControllers.AtlasPlanEval(r, walking_plan_data);
   control = atlasControllers.InstantaneousQPController(r, [], struct('use_mex', example_options.use_mex));
@@ -148,6 +217,6 @@ function [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner
   recovery_plan = recovery_planner.solveBipedProblem(r, x0, zmpact, 0);
   toc(t0);
   walking_plan_data = QPLocomotionPlan.from_point_mass_biped_plan(recovery_plan, r, x0);
-  walking_plan_data.qstar = xstar(1:nq);
+  %walking_plan_data.qstar = xstar(1:nq);
   % walking_plan_data = DRCWalkingPlanData.from_walking_plan_t(walking_plan_data.to_walking_plan_t()); 
 end
