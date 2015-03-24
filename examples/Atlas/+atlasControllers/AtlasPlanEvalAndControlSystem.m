@@ -52,6 +52,7 @@ classdef AtlasPlanEvalAndControlSystem < DrakeSystem
       obj.control = control;
       obj.plan_eval = plan_eval;
       obj.options = options;
+      obj.recovery_plan = QPReactiveRecoveryPlan(r);
 
       if isempty(obj.plan_eval) || isempty(obj.control)
         obj.lc = lcm.lcm.LCM.getSingleton();
