@@ -43,9 +43,9 @@ params = struct('x0', xs(:,1),...
 cvx_settings = struct('verbose', 0);
 
 if settings.optimize_knot_times
-  tic()
+  %tic()
   [vars, status] = qpSplineGridSearchmex(params, cvx_settings);
-  toc()
+  %toc()
   ts(2) = vars.t1;
   ts(3) = vars.t2;
 else
@@ -151,9 +151,9 @@ for j = 1:6
   E(ci, v.c2.i(3)) = -2;
   ci = ci + 1;
 
-  tic()
+  %tic()
   z = E \ d;
-  toc();
+  %toc();
 
   % M = [Q, E'; E, zeros(nc)];
   % b = [zeros(nv, 1); d];
@@ -168,8 +168,8 @@ for j = 1:6
   valuecheck(coefsi, coefs(j,:,:), 1e-5);
 end
 
-objvali
-status.optval
+%objvali
+%status.optval
 % valuecheck(objvali, status.optval);
 
 
