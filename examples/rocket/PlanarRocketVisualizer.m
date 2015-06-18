@@ -3,6 +3,7 @@ classdef PlanarRocketVisualizer < Visualizer
 
   properties
     rocket = [];
+    platform = {};
   end
 
   methods
@@ -10,6 +11,10 @@ classdef PlanarRocketVisualizer < Visualizer
       typecheck(plant,'PlanarRocketPlant');
       obj = obj@Visualizer(plant.getOutputFrame);
       obj.rocket = plant;
+    end
+    
+    function obj = addPlatform(obj, x, y, width)
+      obj.platform = [obj.platform struct('x', x, 'y', y, 'width', width)];
     end
     
     function draw(obj,t,x)
@@ -24,7 +29,7 @@ classdef PlanarRocketVisualizer < Visualizer
         motor = [obj.rocket.wdraw*1.2*[1 1 -1 -1]; obj.rocket.wdraw*[1 0 0 1]];
         a = linspace(0,2*pi,50);
       end
-            
+        
       sfigure(hFig); cla; hold on; view(0,90);
       
       r = [cos(x(3)), sin(x(3)); -sin(x(3)), cos(x(3))];
@@ -35,10 +40,19 @@ classdef PlanarRocketVisualizer < Visualizer
       p = r*(repmat(obj.rocket.T, [1, 4]) + [motor(1,:);motor(2,:)]);
       patch(x(1)+p(1,:),x(2)+p(2,:),0*p(1,:),'b','FaceColor',[0 0 0]);
       
+      if (~isempty(obj.platform))
+        for i=1:numel(obj.platform)
+          pl = obj.platform{i};
+          patch([pl.x-pl.width/2; pl.x+pl.width/2; pl.x+pl.width/2; pl.x-pl.width/2], ...
+                [pl.y-50; pl.y-50; pl.y; pl.y], ...
+                'b', 'FaceColor', [0 0 1.0]);
+        end
+      end
+      
       title(['t = ', num2str(t(1),'%.2f') ' sec']);
       set(gca,'XTick',[],'YTick',[])
       
-      axis image; axis([-20.0 20.0 -1.0 20.0]);
+      axis image; axis([-40.0 40.0 -1.0 60.0]);
       drawnow;
     end    
   end

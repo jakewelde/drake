@@ -147,9 +147,9 @@ classdef PlanarRocketPlant < DrakeSystem
     
     function [c] = hoverTVLQR(obj, xtraj, T)
       utraj = setOutputFrame(PPTrajectory(zoh([0, T+1], obj.m*obj.g/obj.Kt * [1 1;0 0])), obj.getInputFrame);
-      Q = diag([10 10 10 0.1 0.1 0.1]);
-      Qf = Q;
-      R = [10.0 0.00; 0.00 1.0];  %R = diag([0.1 0.1]);
+      Q = diag([100 100 100 0.1 0.1 0.1]);
+      Qf = Q*100;
+      R = [1.0 0.00; 0.00 1.0];  %R = diag([0.1 0.1]);
 
       options.angle_flag = [0;0;1;0;0;0];
       c = tvlqr(obj,xtraj,utraj,Q,R, Qf, options);
