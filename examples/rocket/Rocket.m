@@ -130,13 +130,13 @@ classdef Rocket < RigidBodyManipulator
       outs(2).output = 2;
       outs(3).system = 1;
       outs(3).output = 3;
-      sys = mimoCascade(sys,v, [], [], outs);
       
       sys = mimoCascade(sys, v_thr, [], [], outs);
+      sys = mimoCascade(sys,v, [], [], outs);
       
       x0(4:6) = x0(4:6) + 0.1*rand(3, 1);
-      x0(3) = x0(3) + 5;
-      x0(1) = x0(1) + 3;
+      x0(3) = x0(3) + 3;
+      x0(1) = x0(1) + 5;
       simulate(sys,[0 6],double(x0));
     end
     function runOpenLoop
@@ -148,7 +148,7 @@ classdef Rocket < RigidBodyManipulator
       v = sys.constructVisualizer();
 
       x0 = [0;0;4.0;zeros(13,1)];
-      u0 = Point(sys.getInputFrame, [0.0; 0.0; 5.0]);
+      u0 = Point(sys.getInputFrame, [0.0; 0.0; 5.0, 0.0]);
       
       sys = cascade(ConstantTrajectory(u0),sys);
 
