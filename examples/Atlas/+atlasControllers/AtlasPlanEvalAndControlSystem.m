@@ -38,7 +38,7 @@ classdef AtlasPlanEvalAndControlSystem < DrakeSystem
       if nargin < 4
         options = struct();
       end
-      options = applyDefaults(options, struct('debug_lcm', false));
+      options = applyDefaults(options, struct('debug_lcm', false, 'broadcast_qpinput', true));
       
       input_frame = r.getStateFrame();
       if isempty(control)
@@ -53,7 +53,7 @@ classdef AtlasPlanEvalAndControlSystem < DrakeSystem
       obj.plan_eval = plan_eval;
       obj.options = options;
 
-      if isempty(obj.plan_eval) || isempty(obj.control)
+      if isempty(obj.plan_eval) || isempty(obj.control) || obj.options.broadcast_qpinput
         obj.lc = lcm.lcm.LCM.getSingleton();
         if isempty(obj.plan_eval)
           obj.monitor = drake.util.MessageMonitor(drake.lcmt_qp_controller_input, 'timestamp');
@@ -107,7 +107,8 @@ classdef AtlasPlanEvalAndControlSystem < DrakeSystem
           ctime = toc(t0);
           fprintf(1, 'control: %f\n', ctime);
         end
-      else
+      end
+      if isempty(obj.control) || obj.options.broadcast_qpinput
         if ~obj.quiet
           t0 = tic();
         end
@@ -116,7 +117,9 @@ classdef AtlasPlanEvalAndControlSystem < DrakeSystem
           lcm_time = toc(t0);
           fprintf(1, 'lcm_serialize: %f, ', lcm_time);
         end
-        y = x;
+        if isempty(obj.control)
+          y = x;
+        end
       end
     end
   end
