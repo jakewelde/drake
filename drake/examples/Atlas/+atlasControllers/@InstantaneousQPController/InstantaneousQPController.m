@@ -155,7 +155,7 @@ classdef InstantaneousQPController
       else
         ctrl_data.infocount = 0;
       end
-      if ctrl_data.infocount > 10 && exist('AtlasBehaviorModePublisher','class')
+      if ctrl_data.infocount > 50 && exist('AtlasBehaviorModePublisher','class')
         % kill atlas
         disp('freezing atlas!');
         behavior_pub = AtlasBehaviorModePublisher('ATLAS_BEHAVIOR_COMMAND');
