@@ -73,10 +73,12 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
 
       warning('another z = 0 assumption here');
       omega = sqrt(9.81 / qcom(3));
-      sol = obj.solveBaseProblem(start, omega, use_symbolic);
-    end
+      obj = obj.solveBaseProblem(start, omega, use_symbolic);
 
-    function sol = solveBaseProblem(obj, start, omega, use_symbolic)
+      sol = constructQPLocomotionPlanSettings(obj, biped, x0);
+    end
+    
+    function obj = solveBaseProblem(obj, start, omega, use_symbolic)
       if nargin < 4
         use_symbolic = false;
       end
@@ -151,21 +153,85 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
         valuecheck(objval_check, objval, 1e-3);
         obj = obj_check;
       end
+    end
 
-      sol = PointMassBipedPlan();
-      sol.ts = obj.dt * (0:(obj.nsteps-1));
-      sol.xcom = obj.vars.xcom.value;
-      sol.qr = obj.vars.qr.value;
-      sol.ql = obj.vars.ql.value;
-      sol.qcop = obj.vars.qcop.value;
+
+    function sol = constructQPLocomotionPlanSettings(obj, biped, x0)
+      % construct a QPLocomotionPlanSettings to store our output
+      ts = obj.dt * (0:(obj.nsteps-1));
+      xcom = obj.vars.xcom.value;
+      qr = obj.vars.qr.value;
+      ql = obj.vars.ql.value;
+      qcop = obj.vars.qcop.value;
       motion = [any(abs(diff(obj.vars.qr.value, 1, 2)) >= 0.005), false;
                 any(abs(diff(obj.vars.ql.value, 1, 2)) >= 0.005), false];
       support = ~(motion | [[false; false], motion(:,1:end-1)] | [motion(:,2:end), [false; false]]);
       support(:,1) = support(:,1) & obj.start.contact;
-      sol.support = support;
-      sol.omega = obj.omega;
-    end
+      foot_start = biped.feetPosition(x0(1:biped.getNumPositions()));
+      body_ind = struct('right', biped.getFrame(biped.foot_frame_id.right).body_ind,...
+                        'left', biped.getFrame(biped.foot_frame_id.left).body_ind);
+      body_ind_list = [body_ind.right, body_ind.left];
+      initial_supports = RigidBodySupportState(biped, body_ind_list(support(:, 1)));
+      zmp_knots = struct('t', 0, 'zmp', qcop(:,1), 'supp', initial_supports);
 
+      offset = [-0.048; 0; 0.0811; 0;0;0]; warning('magiiiic numbers')
+      foot_origin_knots = struct('t', ts(1),...
+                                 'right', foot_start.right + offset,...
+                                 'left', foot_start.left + offset,...
+                                 'is_liftoff', false,...
+                                 'is_landing', false,...
+                                 'toe_off_allowed', struct('right', false, 'left', false));
+      motion = [any(abs(diff(qr, 1, 2)) >= 0.005), false;
+                any(abs(diff(ql, 1, 2)) >= 0.005), false];
+      warning('ignoring roll and pitch')
+      warning('hardcoded swing heights')
+      % construct our foot motion plan
+      for j=2:length(ts)
+        foot_origin_knots(end+1).t = ts(j);
+        if (motion(1, j) || motion(1,j-1))
+          zr = 0.025;
+        else
+          zr = 0;
+        end
+        if (motion(2,j) || motion(2,j-1))
+          zl = 0.025;
+        else
+          zl = 0;
+        end
+        foot_origin_knots(end).right = [qr(:,j); zr; 0; 0; foot_start.right(6)]+offset;
+        foot_origin_knots(end).left = [ql(:,j); zl; 0; 0; foot_start.left(6)]+offset;
+        foot_origin_knots(end).is_liftoff = any(support(:,j)<support(:,j-1));
+        if (j > 2)
+          foot_origin_knots(end).is_landing = any(support(:,j) > support(:,j-1));
+        else
+          foot_origin_knots(end).is_landing = false;
+        end
+        foot_origin_knots(end).toe_off_allowed = struct('right', false, 'left', false);
+        zmp_knots(end+1).t = ts(j);
+        zmp_knots(end).zmp = qcop(:,j);
+        zmp_knots(end).supp = RigidBodySupportState(biped, body_ind_list(support(:,j)));
+      end
+
+      % hold that pose
+      warning('this is just wrong')
+      ts(end+1) = ts(end)+100;
+      foot_origin_knots(end+1) = foot_origin_knots(end);
+      foot_origin_knots(end).t = ts(end);
+      zmp_knots(end+1) = zmp_knots(end);
+      zmp_knots(end).t = ts(end);
+      
+      foot_motion_data_r = BodyMotionData.from_body_poses(body_ind.right, ts, ...
+        horzcat(foot_origin_knots(:).right));
+      foot_motion_data_l = BodyMotionData.from_body_poses(body_ind.left, ts, ...
+        horzcat(foot_origin_knots(:).left));
+      foot_motion_data_r.toe_off_allowed = zeros(numel(ts), 1);
+      foot_motion_data_l.toe_off_allowed = zeros(numel(ts), 1);
+      sol = QPLocomotionPlanSettings.fromBipedFootAndZMPKnots([foot_motion_data_r, foot_motion_data_l], zmp_knots, biped, x0);
+      sol.default_qp_input.whole_body_data.constrained_dofs = biped.findPositionIndices('neck');
+      warning('defaulting to recovery gain set')
+      sol.gain_set = 'recovery';
+    end
+    
     function obj = addInitialContactConstraints(obj, contact, use_symbolic)
       if use_symbolic
         if contact(1)
