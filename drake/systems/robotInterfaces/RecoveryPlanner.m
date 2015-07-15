@@ -44,7 +44,10 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
 
     end
 
-    function sol = solveBipedProblem(obj, biped, x0, zmp0, use_symbolic)
+    function sol = solveBipedProblem(obj, biped, x0, zmp0, use_symbolic, tf)
+      if nargin < 6
+        tf = 0;
+      end
       typecheck(biped, 'Biped')
       nq = biped.getNumPositions();
       q0 = x0(1:nq);
@@ -75,7 +78,7 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
       omega = sqrt(9.81 / qcom(3));
       obj = obj.solveBaseProblem(start, omega, use_symbolic);
 
-      sol = constructQPLocomotionPlanSettings(obj, biped, x0);
+      sol = constructQPLocomotionPlanSettings(obj, biped, x0, tf);
     end
     
     function obj = solveBaseProblem(obj, start, omega, use_symbolic)
@@ -156,7 +159,7 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
     end
 
 
-    function sol = constructQPLocomotionPlanSettings(obj, biped, x0)
+    function sol = constructQPLocomotionPlanSettings(obj, biped, x0, tf)
       % construct a QPLocomotionPlanSettings to store our output
       ts = obj.dt * (0:(obj.nsteps-1));
       xcom = obj.vars.xcom.value;
@@ -212,14 +215,14 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
         zmp_knots(end).supp = RigidBodySupportState(biped, body_ind_list(support(:,j)));
       end
 
-      % hold that pose
-      warning('this is just wrong')
-      ts(end+1) = ts(end)+100;
-      foot_origin_knots(end+1) = foot_origin_knots(end);
-      foot_origin_knots(end).t = ts(end);
-      zmp_knots(end+1) = zmp_knots(end);
-      zmp_knots(end).t = ts(end);
-      
+      % hold that pose if tf > end of this plan
+      if (tf > ts(end))
+          ts(end+1) = tf;
+          foot_origin_knots(end+1) = foot_origin_knots(end);
+          foot_origin_knots(end).t = ts(end);
+          zmp_knots(end+1) = zmp_knots(end);
+          zmp_knots(end).t = ts(end);
+      end
       foot_motion_data_r = BodyMotionData.from_body_poses(body_ind.right, ts, ...
         horzcat(foot_origin_knots(:).right));
       foot_motion_data_l = BodyMotionData.from_body_poses(body_ind.left, ts, ...
