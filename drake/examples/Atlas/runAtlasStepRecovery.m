@@ -60,29 +60,30 @@ for iter = 1:3
   [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner, r, x0, zmpact, xstar, nq);
   % profile viewer
 
-  walking_plan_data.robot = r;
+  %walking_plan_data.robot = r;
 
-  pm_biped = PointMassBiped(recovery_plan.omega);
-  [pm_traj, pm_v] = walking_plan_data.simulatePointMassBiped(pm_biped);
-  pm_v.playback(pm_traj, struct('slider', true));
+%   pm_biped = PointMassBiped(recovery_plan.omega);
+%   [pm_traj, pm_v] = walking_plan_data.simulatePointMassBiped(pm_biped);
+%   pm_v.playback(pm_traj, struct('slider', true));
 
 
-  ts = walking_plan_data.zmptraj.getBreaks();
+  ts = walking_plan_data.settings.zmptraj.getBreaks();
 
   % plot walking traj in drake viewer
   lcmgl = drake.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton(),'walking-plan');
 
   for i=1:length(ts)
     lcmgl.glColor3f(0, 0, 1);
-    lcmgl.sphere([walking_plan_data.comtraj.eval(ts(i));0], 0.01, 20, 20);
+    lcmgl.sphere([walking_plan_data.settings.comtraj.eval(ts(i));0], 0.01, 20, 20);
     lcmgl.glColor3f(0, 1, 0);
-    lcmgl.sphere([walking_plan_data.zmptraj.eval(ts(i));0], 0.01, 20, 20);
+    lcmgl.sphere([walking_plan_data.settings.zmptraj.eval(ts(i));0], 0.01, 20, 20);
   end
   lcmgl.switchBuffers();
   % keyboard()
 
   planeval = atlasControllers.AtlasPlanEval(r, walking_plan_data);
-  control = atlasControllers.InstantaneousQPController(r, []);
+  param_sets = atlasParams.getDefaults(r);
+  control = atlasControllers.InstantaneousQPController(r, param_sets, []);
   plancontroller = atlasControllers.AtlasPlanEvalAndControlSystem(r, control, planeval);
   sys = feedback(r, plancontroller);
 
@@ -144,7 +145,9 @@ function [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner
   t0 = tic();
   recovery_plan = recovery_planner.solveBipedProblem(r, x0, zmpact, 0);
   toc(t0);
-  walking_plan_data = QPLocomotionPlan.from_point_mass_biped_plan(recovery_plan, r, x0);
-  walking_plan_data.qtraj = xstar(1:nq);
+ % footsteps = [];
+ % recovery_footstep_plan = FootstepPlan();
+  walking_plan_data = QPLocomotionPlanCPPWrapper(recovery_plan);
+ % walking_plan_data.qtraj = xstar(1:nq);
   % walking_plan_data = DRCWalkingPlanData.from_walking_plan_t(walking_plan_data.to_walking_plan_t()); 
 end
