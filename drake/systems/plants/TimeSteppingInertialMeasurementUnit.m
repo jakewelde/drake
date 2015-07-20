@@ -65,7 +65,7 @@ classdef TimeSteppingInertialMeasurementUnit < TimeSteppingRigidBodySensorWithSt
 
       % Compute accelerometer in global frame from single timestep
       % numerically
-      accel_base = (this_x(7:9) - last_x(7:9)) / tsmanip.timestep;
+      accel_base = (this_x(7:9) - last_x(7:9)) / tsmanip.timestep - manip.gravity;
         accel_body = quatRotateVec(quat_world_to_body, accel_base);
         
       y = [omega_body; ...

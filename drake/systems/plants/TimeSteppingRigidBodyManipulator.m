@@ -193,7 +193,7 @@ classdef TimeSteppingRigidBodyManipulator < DrakeSystem
       end
     end
 
-    function [xdn,df] = update(obj,t,x,u)
+    function [xdn,df] = update(obj,t,x,u)        
       if (nargout>1)
         [obj,z,Mvn,wvn,dz,dMvn,dwvn] = solveLCP(obj,t,x,u);
       else
@@ -262,6 +262,7 @@ classdef TimeSteppingRigidBodyManipulator < DrakeSystem
         v=x(num_q+(1:obj.manip.num_velocities));
         kinsol = doKinematics(obj, q, v);
         [H,C,B] = manipulatorDynamics(obj.manip, q, v);
+
         [phiC,normal,d,xA,xB,idxA,idxB,mu,n,D] = obj.manip.contactConstraints(kinsol, obj.multiple_contacts);
         [z, Mqdn, wqdn, possible_contact_indices, possible_jointlimit_indices] = solveLCPmex(obj.manip.mex_model_ptr, kinsol.mex_ptr, u, phiC, n, D, obj.timestep, obj.z_inactive_guess_tol, obj.LCP_cache.data.z, H, C, B, obj.enable_fastqp);
         possible_contact_indices = logical(possible_contact_indices);
