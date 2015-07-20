@@ -188,11 +188,19 @@ classdef TimeSteppingRigidBodyManipulator < DrakeSystem
       end
     end
 
-    function [xdn,df] = update(obj,t,x,u)
+    function [xdn,df] = update(obj,t,x,u, dH, dC, dB)        
       if (nargout>1)
-        [obj,z,Mqdn,wqdn,dz,dMqdn,dwqdn] = solveLCP(obj,t,x,u);
+        if (nargin > 4)
+          [obj,z,Mqdn,wqdn,dz,dMqdn,dwqdn] = solveLCP(obj,t,x,u, dH, dC, dB);
+        else
+          [obj,z,Mqdn,wqdn,dz,dMqdn,dwqdn] = solveLCP(obj,t,x,u);
+        end
       else
-        [obj,z,Mqdn,wqdn] = solveLCP(obj,t,x,u);
+        if (nargin > 4)
+          [obj,z,Mqdn,wqdn] = solveLCP(obj,t,x,u, dH, dC, dB);
+        else
+          [obj,z,Mqdn,wqdn] = solveLCP(obj,t,x,u);
+        end
       end
 
       num_q = obj.manip.num_positions;
@@ -236,12 +244,19 @@ classdef TimeSteppingRigidBodyManipulator < DrakeSystem
              all(u==obj.LCP_cache.data.u) && num_args_out <= obj.LCP_cache.data.nargout);
     end
 
-    function [obj, z, Mqdn, wqdn] = solveMexLCP(obj, t, x, u)
+    function [obj, z, Mqdn, wqdn] = solveMexLCP(obj, t, x, u, dH, dC, dB)
         num_q = obj.manip.num_positions;
         q=x(1:num_q);
         v=x(num_q+(1:obj.manip.num_velocities));
         kinsol = doKinematics(obj,q);
         [H,C,B] = manipulatorDynamics(obj.manip, q, v);
+
+        if nargin > 4
+          H = H + dH;
+          C = C + dC;
+          B = B + dB;
+        end
+
         [phiC,normal,d,xA,xB,idxA,idxB,mu,n,D] = obj.manip.contactConstraints(kinsol, obj.multiple_contacts);
         [z, Mqdn, wqdn, possible_contact_indices, possible_jointlimit_indices] = solveLCPmex(obj.manip.mex_model_ptr, q, v, u, phiC, n, D, obj.timestep, obj.z_inactive_guess_tol, obj.LCP_cache.data.z, H, C, B, obj.enable_fastqp);
         possible_contact_indices = logical(possible_contact_indices);
@@ -260,10 +275,14 @@ classdef TimeSteppingRigidBodyManipulator < DrakeSystem
         obj.LCP_cache.data.possible_limit_indices = logical(possible_jointlimit_indices);
     end
 
-    function [obj,z,Mqdn,wqdn,dz,dMqdn,dwqdn] = solveLCP(obj,t,x,u)
+    function [obj,z,Mqdn,wqdn,dz,dMqdn,dwqdn] = solveLCP(obj,t,x,u, dH, dC, dB)
       if (nargout<5 && obj.gurobi_present && obj.manip.only_loops && obj.manip.mex_model_ptr~=0 && ~obj.position_control)
-        [obj,z,Mqdn,wqdn] = solveMexLCP(obj,t,x,u);
-	return;
+        if nargin > 4
+          [obj,z,Mqdn,wqdn] = solveMexLCP(obj,t,x,u, dH, dC, dB);
+        else
+          [obj,z,Mqdn,wqdn] = solveMexLCP(obj,t,x,u);
+        end
+	      return;
       end
       
 %       global active_set_fail_count
@@ -293,6 +312,11 @@ classdef TimeSteppingRigidBodyManipulator < DrakeSystem
 
         if (nargout<5)
           [H,C,B] = manipulatorDynamics(obj.manip,q,qd);
+          if nargin > 4
+            H = H + dH;
+            C = C + dC;
+            B = B + dB;
+          end
           if (obj.num_u>0 && ~obj.position_control)
             tau = B*u - C;
           else
@@ -300,6 +324,9 @@ classdef TimeSteppingRigidBodyManipulator < DrakeSystem
           end
         else
           [H,C,B,dH,dC,dB] = manipulatorDynamics(obj.manip,q,qd);
+          if nargin > 4
+            error('Don"t know how to do error with derivatives yet');
+          end
           if (obj.num_u>0 && ~obj.position_control)
             tau = B*u - C;
             dtau = [zeros(num_q,1), matGradMult(dB,u) - dC, B];
