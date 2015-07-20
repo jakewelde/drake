@@ -1,4 +1,4 @@
-function runAtlasStepRecovery(perturbation, example_options)
+function [success, support_ordering] = runAtlasStepRecovery(perturbation, example_options)
 % NOTEST
 % This is an initial test of our newly developed recovery planner. It starts
 % the robot with an initial perturbation and attempts to come to rest standing
@@ -19,7 +19,9 @@ if ~isfield(example_options,'navgoal')
   example_options.navgoal = [1.5;0;0;0;0;0];
 end
 if ~isfield(example_options,'terrain'), example_options.terrain = RigidBodyFlatTerrain; end
-
+if ~isfield(example_options,'symbolic'), example_options.symbolic = false; end
+if ~isfield(example_options,'T'), example_options.T = 0; end
+    
 % silence some warnings
 warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints')
 warning('off','Drake:RigidBodyManipulator:UnsupportedVelocityLimits')
@@ -47,7 +49,7 @@ x0(nq + (1:2)) = x0(nq + (1:2)) + perturbation;
 v = r.constructVisualizer;
 v.display_dt = 0.001;
 
-recovery_planner = RecoveryPlanner([], [], false);
+recovery_planner = RecoveryPlanner([], [], example_options.symbolic);
 
 zmpact = [];
 
@@ -58,7 +60,7 @@ for iter = 1:3
   v.draw(0, x0)
 
   % profile on
-  [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner, r, x0, zmpact, xstar, nq);
+  [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner, r, x0, zmpact, xstar, nq, example_options.symbolic, example_options.T);
   % profile viewer
 
   %walking_plan_data.robot = r;
@@ -78,6 +80,11 @@ for iter = 1:3
     lcmgl.sphere([walking_plan_data.settings.comtraj.eval(ts(i));0], 0.01, 20, 20);
     lcmgl.glColor3f(0, 1, 0);
     lcmgl.sphere([walking_plan_data.settings.zmptraj.eval(ts(i));0], 0.01, 20, 20);
+    lcmgl.glColor3f(1, 0, 0);
+    for j=1:numel(walking_plan_data.settings.body_motions)
+        xt = walking_plan_data.settings.body_motions(j).eval(ts(i));
+        lcmgl.sphere(xt(1:3), 0.01, 20, 20);
+    end
   end
   lcmgl.switchBuffers();
   % keyboard()
@@ -136,15 +143,32 @@ end
 combined_xtraj = combined_xtraj.setOutputFrame(r.getStateFrame());
 v.playback(combined_xtraj, struct('slider', true));
 
+nq = r.getNumPositions;
+q = x0(1:nq);
+qd = x0(nq+(1:nq));
+kinsol = doKinematics(r,q);
+[com,J] = getCOM(r,kinsol);
+icp=FallDetector.getInstantaneousCapturePoint(r,com,J,qd);
+cpos = struct('right', terrainContactPositions(r,kinsol,r.foot_body_id.right),...
+                      'left', terrainContactPositions(r,kinsol,r.foot_body_id.left));
+cpos = [cpos.right, cpos.left];
+success=FallDetector.inSupportPolygon(r,icp,cpos);
 
+support_ordering = {};
+for i=1:numel(walking_plan_data.settings.supports)
+   these_supports = walking_plan_data.settings.supports(i).bodies;
+   if (isempty(support_ordering) || any(these_supports ~= support_ordering{end}))
+       support_ordering = [support_ordering these_supports];
+   end
+end
 % TIMEOUT 1500
 
 end
 
-function [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner, r, x0, zmpact, xstar, nq)
+function [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner, r, x0, zmpact, xstar, nq, symbolic, T)
   % Put into its own function to make profiling easier
   t0 = tic();
-  recovery_plan = recovery_planner.solveBipedProblem(r, x0, zmpact, 0);
+  recovery_plan = recovery_planner.solveBipedProblem(r, x0, zmpact, symbolic, T);
   toc(t0);
  % footsteps = [];
  % recovery_footstep_plan = FootstepPlan();

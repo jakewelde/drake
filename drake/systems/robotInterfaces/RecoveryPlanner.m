@@ -5,9 +5,10 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
     omega
     nsteps = 15;
     dt = 0.05;
-    max_foot_velocity = 2; % m / s
+    max_foot_velocity = 1; % m / s
     STANCE_UPPER_BOUND = 2; % m, an upper bound on the width of the robot's stance, for mixed-integer constraint formulation
     weights = struct('foot_motion', 0.01,...
+                     'foot_motion_acc', 0.01,...
                      'final_posture', 0.01);
     nom_stance_width = 0.26;
   end
@@ -192,12 +193,12 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
       for j=2:length(ts)
         foot_origin_knots(end+1).t = ts(j);
         if (motion(1, j) || motion(1,j-1))
-          zr = 0.025;
+          zr = 0.03;
         else
           zr = 0;
         end
         if (motion(2,j) || motion(2,j-1))
-          zl = 0.025;
+          zl = 0.03;
         else
           zl = 0;
         end
@@ -341,12 +342,12 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
 
     function obj = addReachability(obj, use_symbolic)
       initial_deltas = [obj.start.qr - obj.start.xcom(1:2), obj.start.ql - obj.start.xcom(1:2)];
-      max_forward_step = max([0.2, initial_deltas(1,:)]);
-      min_backward_step = min([-0.15, initial_deltas(1,:)]);
+      max_forward_step = max([0.35, initial_deltas(1,:)]);
+      min_backward_step = min([-0.35, initial_deltas(1,:)]);
       [Ar, br] = poly2lincon([min_backward_step, max_forward_step, max_forward_step, min_backward_step],...
-                             [0.1, 0.1, -0.25, -0.25]);
+                             [0.1, 0.1, -0.35, -0.35]);
       [Al, bl] = poly2lincon([min_backward_step, max_forward_step, max_forward_step, min_backward_step],...
-                             [-0.1, -0.1, 0.25, 0.25]);
+                             [-0.1, -0.1, 0.35, 0.35]);
       A_l_minus_r = [0, 1; 
                      0, -1];
       b_l_minus_r = [0.45;
@@ -698,11 +699,17 @@ classdef RecoveryPlanner < MixedIntegerConvexProgram
 
     function obj = addFootMotionObjective(obj, use_symbolic)
       if use_symbolic
+        %velocity
         for j = 1:obj.nsteps-1
           obj = obj.addSymbolicObjective(...
             obj.weights.foot_motion * sum(abs(obj.vars.qr.symb(:,j) - obj.vars.qr.symb(:,j+1))) + ...
             obj.weights.foot_motion * sum(abs(obj.vars.ql.symb(:,j) - obj.vars.ql.symb(:,j+1))));
         end
+        % acceleration
+%         for j = 1:obj.nsteps-2
+%           obj = obj.addSymbolicObjective(...
+%             obj.weights.foot_motion_acc * norm(obj.vars.qr.symb(:,j+2)-2*obj.vars.qr.symb(:,j+1)+obj.vars.qr.symb(:,j)));
+%         end
       else
         A = zeros(4 * 2 * (obj.nsteps-1) + 1, obj.nv);
         b = zeros(size(A, 1), 1);
