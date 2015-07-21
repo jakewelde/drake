@@ -20,6 +20,8 @@ classdef FixedPointProgram < NonlinearProgram
       obj = obj@NonlinearProgram(num_x+num_u,vertcat(getCoordinateNames(sys.getStateFrame), getCoordinateNames(sys.getInputFrame)));
       obj.sys = sys;
       obj = addDynamicConstraints(obj,x_dimensions_to_ignore);
+
+      obj.solver_options.snopt.DerivativeOption = -1;
       
       obj = sys.addStateConstraintsToProgram(obj,1:num_x);
       obj = sys.addInputConstraintsToProgram(obj,num_x+(1:num_u));
@@ -66,14 +68,20 @@ classdef FixedPointProgram < NonlinearProgram
       end
     end
     
-    function [xstar,ustar,info] = findFixedPoint(obj,x0,u0)
+    function [xstar,ustar,info] = findFixedPoint(obj,x0,u0,v)
+      if (nargin < 4)
+        v = [];
+      end
       if isa(x0,'Point')
-        x0 = double(x0.inFrame(obj.getStateFrame));
+        x0 = double(x0.inFrame(obj.sys.getStateFrame));
       end
       if isa(u0,'Point')
-        u0 = double(u0.inFrame(obj.getInputFrame));
+        u0 = double(u0.inFrame(obj.sys.getInputFrame));
       end
       w0 = [x0;u0];
+      if ~isempty(v)
+        prog = obj.addDisplayFunction(@(x)v.drawWrapper(0,x));
+      end
       [wstar,info] = solve(obj,w0);
       xstar = Point(obj.sys.getStateFrame,wstar(1:length(x0)));
       ustar = Point(obj.sys.getInputFrame,wstar(length(x0)+(1:length(u0))));
