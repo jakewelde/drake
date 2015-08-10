@@ -308,6 +308,14 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
       ustar = Point(obj.plant.getInputFrame,z(obj.u_inds));
       lstar = z(obj.l_inds);
     end
+
+    function obj = addStateCost(obj,state_cost_function)
+      nQ = obj.plant.getNumPositions();
+      state_cost = FunctionHandleObjective(nQ,state_cost_function, -1);
+      %state_cost.grad_method = 'numerical';
+      obj = obj.addCost(state_cost,{obj.q_inds});
+    end
+
   end
 
 end
