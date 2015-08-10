@@ -229,6 +229,7 @@ public:
   void getTerrainContactPoints(const RigidBody& body, Eigen::Matrix3Xd &terrain_points) const;
 
   bool collisionRaycast(const Matrix3Xd &origins, const Matrix3Xd &ray_endpoints, VectorXd &distances, bool use_margins=false);
+  bool collisionRaycast(const Matrix3Xd &origins, const Matrix3Xd &ray_endpoints, VectorXd &distances, Matrix3Xd &normals, bool use_margins=false);
 
   bool collisionDetect( VectorXd& phi,
                         MatrixXd& normal,

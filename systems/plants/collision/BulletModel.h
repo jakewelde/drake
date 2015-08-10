@@ -77,7 +77,7 @@ namespace DrakeCollision
 
       virtual bool collisionRaycast(const Eigen::Matrix3Xd &origins, 
               const Eigen::Matrix3Xd &ray_endpoints, bool use_margins, 
-              Eigen::VectorXd &distances);
+              Eigen::VectorXd &distances, Eigen::Matrix3Xd &normals);
 
       virtual std::vector<PointPair> potentialCollisionPoints(bool use_margins);
 

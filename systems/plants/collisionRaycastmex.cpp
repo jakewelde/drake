@@ -45,12 +45,16 @@ void mexFunction( int nlhs, mxArray *plhs[],int nrhs, const mxArray *prhs[] ) {
   memcpy(ray_endpoints.data(), mxGetPrSafe(prhs[2]), sizeof(double)*mxGetNumberOfElements(prhs[2]));
   bool use_margins = (mxGetScalar(prhs[3])!=0.0);
   VectorXd distances;
+  Matrix3Xd normals;
+  model->collisionRaycast(origins, ray_endpoints, distances, normals, use_margins);
   
-  model->collisionRaycast(origins, ray_endpoints, distances, use_margins);
-  
-  if (nlhs>0) {
+  if (nlhs>=1) {
     plhs[0] = mxCreateDoubleMatrix(static_cast<int>(distances.size()),1,mxREAL);
     memcpy(mxGetPrSafe(plhs[0]), distances.data(), sizeof(double)*distances.size());
+  }
+  if (nlhs>=2) {
+    plhs[1] = mxCreateDoubleMatrix(3, static_cast<int>(normals.size())/3, mxREAL);
+    memcpy(mxGetPrSafe(plhs[1]), normals.data(), sizeof(double)*normals.size());
   }
   
 }

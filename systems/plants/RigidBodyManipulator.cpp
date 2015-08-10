@@ -549,12 +549,23 @@ void RigidBodyManipulator::getTerrainContactPoints(const RigidBody& body, Eigen:
   }
 }
 
+
 bool RigidBodyManipulator::collisionRaycast(const Matrix3Xd &origins,
                                             const Matrix3Xd &ray_endpoints,
                                             VectorXd &distances,
                                             bool use_margins )
 {
-  return collision_model->collisionRaycast(origins, ray_endpoints, use_margins, distances);
+  Matrix3Xd normals;
+  return this->collisionRaycast(origins, ray_endpoints, distances, normals, use_margins);
+}
+
+bool RigidBodyManipulator::collisionRaycast(const Matrix3Xd &origins,
+                                            const Matrix3Xd &ray_endpoints,
+                                            VectorXd &distances,
+                                            Matrix3Xd &normals,
+                                            bool use_margins )
+{
+  return collision_model->collisionRaycast(origins, ray_endpoints, use_margins, distances, normals);
 }
 
 
