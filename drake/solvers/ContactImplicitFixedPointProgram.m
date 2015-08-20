@@ -55,7 +55,10 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
         options.lambda_jl_mult = 1;
       end
       if ~isfield(options,'active_collision_options')
-        options.active_collision_options.terrain_only = true;
+        options.active_collision_options.terrain_only = false;
+      end
+      if ~isfield(options, 'multiple_contacts')
+        options.multiple_contacts = false;
       end
 
       typecheck(plant,'RigidBodyManipulator');
@@ -80,7 +83,7 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
       obj.u_inds = reshape(nQ + (1:nU),nU,1);
 
       obj.nC = obj.plant.getNumContactPairs;
-      [~,normal,d] = obj.plant.contactConstraints(zeros(obj.plant.getNumPositions,1));
+      [~,normal,d] = obj.plant.contactConstraints(zeros(obj.plant.getNumPositions,1), obj.options.multiple_contacts);
       obj.nD = 2*length(d);
       assert(size(normal,2) == obj.nC); % just a double check
       
@@ -123,7 +126,12 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
       dynInds = {obj.q_inds;obj.u_inds;obj.l_inds;obj.ljl_inds};
       obj = obj.addConstraint(dynamicConstraint, dynInds);
 
-      [~,~,~,~,~,~,~,mu] = obj.plant.contactConstraints(zeros(nQ,1),false,obj.options.active_collision_options);
+      stabilityConstraint = FunctionHandleConstraint(-Inf, ones(1,1),n_vars,@obj.dynamics_linstability_constraint_fun);
+      stabilityConstraint.grad_method = 'numerical';
+      dynInds = {obj.q_inds;obj.u_inds;obj.l_inds;obj.ljl_inds};
+      obj = obj.addConstraint(stabilityConstraint, dynInds);
+      
+      [~,~,~,~,~,~,~,mu] = obj.plant.contactConstraints(zeros(nQ,1),obj.options.multiple_contacts,obj.options.active_collision_options);
       
       if obj.nC > 0
         % indices for gamma
@@ -179,7 +187,7 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
         q = x(1:nq);
         v = q*0;
         
-        [phi,normal,d,xA,xB,idxA,idxB,mu,n,D,dn,dD] = obj.plant.contactConstraints(q,false,obj.options.active_collision_options);
+        [phi,normal,d,xA,xB,idxA,idxB,mu,n,D,dn,dD] = obj.plant.contactConstraints(q,obj.options.multiple_contacts,obj.options.active_collision_options);
         
         f = zeros(obj.nC*(1+obj.nD),1);
         df = zeros(obj.nC*(1+obj.nD),nq+obj.nC*(2+obj.nD));
@@ -226,7 +234,7 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
         [dBuminusC(:, 1:nq) zeros(nq,nu+nl+njl)];
       
       if nl>0
-        [phi,normal,~,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(q0,false,obj.options.active_collision_options);
+        [phi,normal,~,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(q0,obj.options.multiple_contacts,obj.options.active_collision_options);
         % construct J and dJ from n,D,dn, and dD so they relate to the
         % lambda vector
         J = zeros(nl,nq);
@@ -254,7 +262,103 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
       f = [fv];
       df = [dfv];
     end
+    
+    function f = dynamics_linstability_constraint_fun(obj,q0,u,lambda,lambda_jl)
+      nq = obj.plant.getNumPositions;
+      nv = obj.plant.getNumVelocities;
+      nu = obj.plant.getNumInputs;
+      nl = length(lambda);
+      njl = length(lambda_jl);
 
+      lambda = lambda*obj.options.lambda_mult;
+      lambda_jl = lambda_jl*obj.options.lambda_jl_mult;
+
+      assert(nq == nv) % not quite ready for the alternative
+
+      v0 = q0*0;
+
+      [H,C,B,dH,dC,dB] = obj.plant.manipulatorDynamics(q0, v0);
+
+      BuminusC = B*u-C; % functionally B*u-G, since v0 = 0
+
+      if nu>0,  
+        dBuminusC = matGradMult(dB,u) - dC;
+      else
+        dBuminusC = -dC;
+      end
+
+      % 0 = (B*u - C) + n^T lambda_N + d^T * lambda_f
+      fv = BuminusC;
+      % [q0 v0 u l ljl]
+
+      dfv = [zeros(nq,nq), B, zeros(nv,nl+njl)] + ...
+        [dBuminusC(:, 1:nq) zeros(nq,nu+nl+njl)];
+
+      d = [];
+      if nl>0
+        [phi,normal,d,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(q0,obj.options.multiple_contacts,obj.options.active_collision_options);
+        for j=1:numel(d)
+           d{j} = d{j}(:, phi<0); 
+        end
+        % construct J and dJ from n,D,dn, and dD so they relate to the
+        % lambda vector
+        J = zeros(nl,nq);
+        J(1:2+obj.nD:end,:) = n;
+        dJ = zeros(nl*nq,nq);
+        dJ(1:2+obj.nD:end,:) = dn;
+
+        for j=1:length(D),
+          J(1+j:2+obj.nD:end,:) = D{j};
+          dJ(1+j:2+obj.nD:end,:) = dD{j};
+        end
+
+        fv = fv + J'*lambda;
+        dfv(:,1:nq) = dfv(:,1:nq) + matGradMult(dJ,lambda,true);
+        dfv(:,1+nq+nu:nq+nu+nl) = J'*obj.options.lambda_mult;
+      end
+
+      if njl>0
+        [~,J_jl] = jointLimitConstraints(obj.plant,q0);
+
+        fv = fv + J_jl'*lambda_jl;
+        dfv(:,1+nq+nu+nl:nq+nu+nl+njl) = J_jl'*obj.options.lambda_jl_mult;
+      end
+      
+      
+      % calculate qdd to help guide us in if we're not feasible yet
+      %qdd = pinv(H)*fv;
+      %dfv(:,1:nq) = dfv(:, 1:nq) - reshape(dH(:, 1:nq) * qdd, nq, nq);
+      % qdd = A * (q - q0) linearization
+      % sol like (q-q0) = c * exp(lambda*t)
+      % plugging back in leads to (A - lambda^2)*c = 0
+      % i.e. lambdas = sqrt'd eigenvalues of A
+      % want them all nonpositive for stability
+      %[V, theseeigs] = eig(pinv(H)*dfv(:, 1:nq));
+      %theseeigs = diag(theseeigs);
+      %theseeigs = abs(real(theseeigs.^(1/2)));
+      %theseeigs = real(eig(-pinv(H)*reshape(dH(:, 1:nq), nq, nq)));
+      %f = max(theseeigs)
+      %f(1:numel(theseeigs)) = theseeigs;
+      
+      % qdd / dq
+      min(phi)
+      d
+      Hinv = pinv(H);
+      qdd_dq = -Hinv * reshape(dH(:, 1:nq) * Hinv * fv, nq, nq) + Hinv * dfv(:,1:nq);
+      % qdd / du
+      qdd_du = Hinv * B;
+      % qdd / dlambda
+      % probably not handling joint lims correctly yet
+      qdd_dlambda = Hinv * J.';
+      A = [qdd_dq qdd_du qdd_dlambda];
+      
+      [V, theseeigs] = eig(qdd_dq);
+      theseeigs = diag(theseeigs);
+      theseeigs = abs(real(theseeigs.^(1/2)));
+      f = max(theseeigs)
+      
+    end
+    
     % 
     function z0 = getInitialVars(obj,stateguess)
       z0 = zeros(obj.num_vars,1);
@@ -294,7 +398,7 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
     end
 
     
-    function [qstar,ustar,lstar,info] = findFixedPoint(obj,guess,v)
+    function [qstar,ustar,lstar,info,F] = findFixedPoint(obj,guess,v)
       if nargin<3, v = []; end
       if nargin<2, guess = struct(); end
 
