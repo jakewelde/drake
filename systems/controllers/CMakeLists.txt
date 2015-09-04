@@ -105,7 +105,7 @@ if (MATLAB_FOUND)
   add_library(drakeZMPUtil zmpUtil.cpp)
   target_link_libraries(drakeZMPUtil drakeTrajectories)
   pods_install_headers(zmpUtil.h DESTINATION drake)
-
+  pods_install_libraries(drakeZMPUtil)
 
 endif(MATLAB_FOUND)
 
