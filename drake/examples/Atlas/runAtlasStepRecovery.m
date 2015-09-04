@@ -19,7 +19,7 @@ if ~isfield(example_options,'navgoal')
   example_options.navgoal = [1.5;0;0;0;0;0];
 end
 if ~isfield(example_options,'terrain'), example_options.terrain = RigidBodyFlatTerrain; end
-if ~isfield(example_options,'symbolic'), example_options.symbolic = false; end
+if ~isfield(example_options,'symbolic'), example_options.symbolic = true; end
 if ~isfield(example_options,'T'), example_options.T = 0; end
     
 % silence some warnings
@@ -150,7 +150,7 @@ kinsol = doKinematics(r,q);
 [com,J] = getCOM(r,kinsol);
 icp=FallDetector.getInstantaneousCapturePoint(r,com,J,qd);
 cpos = struct('right', terrainContactPositions(r,kinsol,r.foot_body_id.right),...
-                      'left', terrainContactPositions(r,kinsol,r.foot_body_id.left));
+              'left', terrainContactPositions(r,kinsol,r.foot_body_id.left));
 cpos = [cpos.right, cpos.left];
 success=FallDetector.inSupportPolygon(r,icp,cpos);
 
@@ -172,7 +172,9 @@ function [walking_plan_data, recovery_plan] = planning_pipeline(recovery_planner
   toc(t0);
  % footsteps = [];
  % recovery_footstep_plan = FootstepPlan();
-  walking_plan_data = QPLocomotionPlanCPPWrapper(recovery_plan);
+  planLCM = DRCQPLocomotionPlan.toLCM(recovery_plan);
+  planFromLCM = DRCQPLocomotionPlan.from_qp_locomotion_plan_t(planLCM, r);
+  walking_plan_data = QPLocomotionPlanCPPWrapper(planFromLCM);
  % walking_plan_data.qtraj = xstar(1:nq);
   % walking_plan_data = DRCWalkingPlanData.from_walking_plan_t(walking_plan_data.to_walking_plan_t()); 
 end
