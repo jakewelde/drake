@@ -19,7 +19,7 @@ if ~isfield(example_options,'navgoal')
   example_options.navgoal = [1.5;0;0;0;0;0];
 end
 if ~isfield(example_options,'terrain'), example_options.terrain = RigidBodyFlatTerrain; end
-if ~isfield(example_options,'symbolic'), example_options.symbolic = true; end
+if ~isfield(example_options,'symbolic'), example_options.symbolic = false; end
 if ~isfield(example_options,'T'), example_options.T = 0; end
     
 % silence some warnings
@@ -97,6 +97,10 @@ for iter = 1:3
 
   output_select(1).system=1;
   output_select(1).output=1;
+  
+v = v.setNumInputs(sys.getNumOutputs);
+v = v.setInputFrame(sys.getOutputFrame);
+
   sys = mimoCascade(sys,v,[],[],output_select);
 
   T = walking_plan_data.duration;
