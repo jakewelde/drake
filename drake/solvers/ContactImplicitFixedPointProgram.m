@@ -110,10 +110,6 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
       obj = addDynamicConstraints(obj,x_dimensions_to_ignore);
       
       % todo: state and input constraints
-
-      nq = obj.plant.getNumPositions();
-      fixedPointConstraint = ConstantConstraint(zeros(nq, 1));
-      obj.addConstraint(fixedPointConstraint, obj.q_inds);
     end
     
     function obj = addDynamicConstraints(obj,x_dimensions_to_ignore)
@@ -122,14 +118,18 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
 
       %      state input   contact forces      joint limits
       n_vars = nQ + nU + obj.nC*(2+obj.nD) + obj.nJL;
-      dynamicConstraint = FunctionHandleConstraint(zeros(nQ,1),zeros(nQ,1),n_vars,@obj.dynamics_constraint_fun);
+      dynamicConstraint = FunctionHandleConstraint(0*ones(nQ,1),0*ones(nQ,1),n_vars,@obj.dynamics_constraint_fun);
       dynInds = {obj.q_inds;obj.u_inds;obj.l_inds;obj.ljl_inds};
       obj = obj.addConstraint(dynamicConstraint, dynInds);
-
-      stabilityConstraint = FunctionHandleConstraint(-Inf, ones(1,1),n_vars,@obj.dynamics_linstability_constraint_fun);
-      stabilityConstraint.grad_method = 'numerical';
-      dynInds = {obj.q_inds;obj.u_inds;obj.l_inds;obj.ljl_inds};
-      obj = obj.addConstraint(stabilityConstraint, dynInds);
+      %dynamicCost = FunctionHandleConstraint(0,0,n_vars,@(q,u,l,ljl)norm(obj.dynamics_constraint_fun(q,u,l,ljl)));
+     % dynamicCost.grad_method = 'numerical';
+    %  obj = obj.addCost(dynamicCost, dynInds);
+      
+      
+%       stabilityConstraint = FunctionHandleConstraint(-Inf, ones(1,1)*-1E-3,n_vars,@obj.dynamics_linstability_constraint_fun);
+%       stabilityConstraint.grad_method = 'numerical';
+%       dynInds = {obj.q_inds;obj.u_inds;obj.l_inds;obj.ljl_inds};
+%       obj = obj.addConstraint(stabilityConstraint, dynInds);
       
       [~,~,~,~,~,~,~,mu] = obj.plant.contactConstraints(zeros(nQ,1),obj.options.multiple_contacts,obj.options.active_collision_options);
       
@@ -269,6 +269,8 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
       nu = obj.plant.getNumInputs;
       nl = length(lambda);
       njl = length(lambda_jl);
+      
+      kinsol = obj.plant.doKinematics(q0);
 
       lambda = lambda*obj.options.lambda_mult;
       lambda_jl = lambda_jl*obj.options.lambda_jl_mult;
@@ -296,7 +298,7 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
 
       d = [];
       if nl>0
-        [phi,normal,d,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(q0,obj.options.multiple_contacts,obj.options.active_collision_options);
+        [phi,normal,d,xA,xB,idxA,idxB,mu,n,D,dn,dD] = obj.plant.contactConstraints(q0,obj.options.multiple_contacts,obj.options.active_collision_options);
         for j=1:numel(d)
            d{j} = d{j}(:, phi<0); 
         end
@@ -341,21 +343,42 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
       %f(1:numel(theseeigs)) = theseeigs;
       
       % qdd / dq
-      min(phi)
-      d
-      Hinv = pinv(H);
-      qdd_dq = -Hinv * reshape(dH(:, 1:nq) * Hinv * fv, nq, nq) + Hinv * dfv(:,1:nq);
-      % qdd / du
-      qdd_du = Hinv * B;
-      % qdd / dlambda
-      % probably not handling joint lims correctly yet
-      qdd_dlambda = Hinv * J.';
-      A = [qdd_dq qdd_du qdd_dlambda];
-      
-      [V, theseeigs] = eig(qdd_dq);
-      theseeigs = diag(theseeigs);
-      theseeigs = abs(real(theseeigs.^(1/2)));
-      f = max(theseeigs)
+%       min(phi)
+%       d
+%       Hinv = pinv(H);
+%       qdd_dq = -Hinv * reshape(dH(:, 1:nq) * Hinv * fv, nq, nq) + Hinv * dfv(:,1:nq);
+%       % qdd / du
+%       qdd_du = Hinv * B;
+%       % qdd / dlambda
+%       % probably not handling joint lims correctly yet
+%       qdd_dlambda = Hinv * J.';
+%       A = [qdd_dq qdd_du qdd_dlambda];
+%       
+%       [V, theseeigs] = eig(qdd_dq);
+%       theseeigs = diag(theseeigs);
+%       theseeigs = abs(real(theseeigs.^(1/2)));
+%       f = max(theseeigs)
+
+        % this doesn't work because it doesn't help guide the sol down
+        % to the "good" contact configs.
+        % WHYYY IS IT SO RESISTANT
+        f = 0;
+        for i=2:max(idxB)
+           bodycom = obj.plant.forwardKin(kinsol, 1, obj.plant.body(i).com);
+           good_normals_per_body = [normal(:, phi<0.001 & idxB==i) (-obj.plant.gravity/norm(obj.plant.gravity))]; 
+           if (size(unique(good_normals_per_body.', 'rows'), 1) >= 4)
+               K = convhulln(good_normals_per_body.');
+               for j=1:size(K, 1)
+                  facet = good_normals_per_body(:,K(j,:)); 
+                  pnormal = cross(facet(:,1), facet(:,2));
+                  if (norm(pnormal) > 0.1)
+                    d = -pnormal.' * facet(:,1);
+                    dist = pnormal.' * bodycom + d;
+                    f = f - dist;
+                  end
+               end
+           end
+        end
       
     end
     
