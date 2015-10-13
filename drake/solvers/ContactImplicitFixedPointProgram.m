@@ -151,7 +151,7 @@ classdef ContactImplicitFixedPointProgram < NonlinearProgram
         %  0 <= mu*lambda_N - sum(lambda_fi)
         A = zeros(obj.nC, obj.nC*(obj.nD+1));
         for k=1:obj.nC
-           A(k, (1:(obj.nD+1)) + ones(1,obj.nD+1)*(k-1)) = ...
+           A(k, (1:(obj.nD+1)) + ones(1,obj.nD+1)*(k-1)*(obj.nD+1)) = ...
                [mu(k), -ones(1, obj.nD)];
         end
         obj = obj.addConstraint(LinearConstraint(zeros(obj.nC,1), ones(obj.nC,1)*Inf, A), obj.l_inds);
