@@ -23,7 +23,7 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
     nonlincompl_slack_inds % obj.nC of these
     jlcompl_slack_inds % obj.nJL of these
     
-    dynamics_scale = 0.1;
+    dynamics_scale = 1;
     nonlincompl_scale = 1.0;
     nonlincompl_slack_scale = 100.0;
     lincompl_scale = 1.0;
