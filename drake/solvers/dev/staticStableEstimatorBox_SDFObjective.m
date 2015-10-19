@@ -6,7 +6,7 @@ function [c, dc] = staticStableEstimatorBox_SDFObjective(q, p, scanPts)
     kinsol = p.doKinematics(q);
     [phi,n,x,x_body,body_idx] = p.signedDistances(kinsol,scanPts,false);
     
-    K = 10 / size(scanPts, 2);
+    K = 1000 / size(scanPts, 2);
     c = K*phi.'*phi;
    % dc = 2*repmat(phi,1,3)*n;
     % derivatives

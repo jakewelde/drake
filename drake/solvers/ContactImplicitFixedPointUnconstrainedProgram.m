@@ -23,14 +23,15 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
     nonlincompl_slack_inds % obj.nC of these
     jlcompl_slack_inds % obj.nJL of these
     
-    dynamics_scale = 100;
+    total_scale = 0.001;
+    dynamics_scale = 0.00;
     nonlincompl_scale = 1.0;
-    nonlincompl_slack_scale = 100.0;
+    nonlincompl_slack_scale = 1.0;
     lincompl_scale = 1.0;
-    lincompl_slack_scale = 100.0;
-    penetration_scale = 100.0;
+    lincompl_slack_scale = 1.0;
+    penetration_scale = 1.0;
     jlcompl_scale = 1.0;
-    jlcompl_slack_scale = 100.0;
+    jlcompl_slack_scale = 1.0;
     
     
   end
@@ -86,7 +87,7 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
       positionNames = positionNames(1:nQ);
       obj = obj@NonlinearProgram(nQ+nU,vertcat(positionNames, getCoordinateNames(plant.getInputFrame)));
 
-            scale = 1;
+      scale = obj.total_scale;
       obj.dynamics_scale = obj.dynamics_scale*scale;
       obj.nonlincompl_scale = obj.nonlincompl_scale*scale;
       obj.nonlincompl_slack_scale = obj.nonlincompl_slack_scale*scale;
@@ -327,13 +328,7 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
     
     % 
     function z0 = getInitialVars(obj,stateguess)
-      z0 = zeros(obj.num_vars,1);
-
-      if ~isfield(stateguess,'u')
-        nU = getNumInputs(obj.plant);
-        stateguess.u = 0.01*randn(nU,1);
-      end
-      z0(obj.u_inds) = stateguess.u;      
+      z0 = zeros(obj.num_vars,1);  
       
       if ~isfield(stateguess,'q')
         nQ = getNumPositions(obj.plant);
@@ -341,25 +336,56 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
       end
       z0(obj.q_inds) = stateguess.q;
       
+      kinsol = obj.plant.doKinematics(stateguess.q);
+      [phi,normal,d,xA,xB,idxA,idxB,mu,n,D,dn,dD] = obj.plant.contactConstraints(stateguess.q,obj.options.multiple_contacts,obj.options.active_collision_options);
+      [H,C,B,dH,dC,dB] = obj.plant.manipulatorDynamics(stateguess.q, 0*stateguess.q);
+      nU = getNumInputs(obj.plant);
+      nl = numel(obj.l_inds);
+      nq = obj.plant.getNumPositions;
+      if (numel(phi) > 0)
+        J = zeros(nl,nq);
+        J(1:1+obj.nD:end,:) = n;
+        for j=1:length(D),
+          J(1+j:1+obj.nD:end,:) = D{j};
+        end
+      end
+      
+      if ~isfield(stateguess,'l') && ~isfield(stateguess, 'u')
+          % jointly calculate contact force and control input guess
+          lu = [J.' B] \ C;
+          stateguess.l = lu(1:nl);
+          stateguess.u = lu((nl+1):end);
+      end
+      
       if obj.nC > 0
         if ~isfield(stateguess,'l')
-          stateguess.l = 0;
+          % calculate an l guess: zero where phi!=0,
+          % solution to manip eq otherwise
+          stateguess.l = zeros(numel(obj.l_inds),1);
+          stateguess.l = (J.') \ (C - B*zeros(nU,1));
         end
         z0(obj.l_inds) = stateguess.l;
+        if ~isempty(obj.nonlincompl_slack_inds)
+          z0(obj.nonlincompl_slack_inds) = stateguess.l(1:obj.nD+1:end) .* phi;
+        end
       end
       if obj.nJL > 0
         if ~isfield(stateguess,'ljl')
+          % guess that we start out away from joint lims
           stateguess.ljl = 0;
         end
         z0(obj.ljl_inds) = stateguess.ljl;
       end
-            
-      if obj.nC > 0
-        lambda_inds = obj.l_inds;
-        %if ~isempty(obj.nonlincompl_slack_inds)
-        %  z0(obj.nonlincompl_slack_inds) = obj.nonlincompl_constraint.slack_fun(z0([obj.q_inds;lambda_inds]));
-        %end
+      
+      % explain as much of the rest as possible with joint torques
+      if ~isfield(stateguess,'u')
+        if (nU > 0)
+          stateguess.u = B \ (C - J.'*stateguess.l);
+        else
+          stateguess.u = 0;
+        end
       end
+      z0(obj.u_inds) = stateguess.u;    
     end
 
     
