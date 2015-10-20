@@ -34,7 +34,7 @@ l_leg_joints = find(strncmp(joints, 'l_leg_', 5));
 r_leg_joints = find(strncmp(joints, 'r_leg_', 5));
 n_leg_joints = numel(r_leg_joints);
 
-scale = 0;
+scale = 1;
 options.compl_slack = scale*0.01;
 options.lincompl_slack = scale*0.001;
 options.jlcompl_slack = scale*0.01;
@@ -46,6 +46,7 @@ opt = opt.setSolverOptions('snopt','VerifyLevel', 0);
 opt = opt.setSolverOptions('snopt','MajorOptimalityTolerance', 1E-5);
 opt = opt.setSolverOptions('snopt','SuperbasicsLimit', 10000);
 opt = opt.setSolverOptions('snopt','print','snopt.out');
+
 
 %opt = opt.addInputCost(QuadraticSumConstraint(0,0,0.1*eye(nu),zeros(nu,1)));
 % remove floating base fredom that we don't need
@@ -109,8 +110,10 @@ sdfCost = FunctionHandleConstraint(0,0,nq, @(q)staticStableEstimatorBox_SDFObjec
 %sdfCost.grad_method = 'numerical';
 opt = opt.addCost(sdfCost, opt.q_inds);
 
+
+
 guess = struct();
-guess.q = double(q_gt) + 0.1*(rand(numel(q_gt, 1))-0.5);
+guess.q = double(q_gt) + [0.15*(rand(6,1)-0.5); 1.0*(rand(numel(q_gt)-6, 1)-0.5)];
 v.draw(0, guess.q);
 [q, u, l, info, F] = opt.findFixedPoint(guess, v);
 

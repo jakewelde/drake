@@ -20,18 +20,12 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
     jl_ub_ind % joint indices where the lower bound is finite
     nJL % number of joint limits = length([jl_lb_ind;jl_ub_ind])
     
-    nonlincompl_slack_inds % obj.nC of these
-    jlcompl_slack_inds % obj.nJL of these
-    
     total_scale = 0.001;
-    dynamics_scale = 0.00;
+    dynamics_scale = 0.000;
     nonlincompl_scale = 1.0;
-    nonlincompl_slack_scale = 1.0;
     lincompl_scale = 1.0;
-    lincompl_slack_scale = 1.0;
     penetration_scale = 1.0;
     jlcompl_scale = 1.0;
-    jlcompl_slack_scale = 1.0;
     
     
   end
@@ -90,9 +84,7 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
       scale = obj.total_scale;
       obj.dynamics_scale = obj.dynamics_scale*scale;
       obj.nonlincompl_scale = obj.nonlincompl_scale*scale;
-      obj.nonlincompl_slack_scale = obj.nonlincompl_slack_scale*scale;
       obj.lincompl_scale = obj.lincompl_scale*scale;
-      obj.lincompl_slack_scale = obj.lincompl_slack_scale*scale;
       obj.penetration_scale = obj.penetration_scale*scale;
       
       obj.options = options;
@@ -117,12 +109,6 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
         obj.lfi_inds(:,i) = (2:1+obj.nD)' + (i-1)*(1+obj.nD)*ones(obj.nD,1);
       end
       
-      % slack for complementarity
-      nlSlack = obj.nC;
-      obj.nonlincompl_slack_inds = reshape(obj.num_vars + (1:nlSlack), nlSlack, 1);
-      obj = obj.addDecisionVariable(nlSlack);
-      
-      
       obj.nJL = obj.plant.getNumJointLimitConstraints();
       obj.ljl_inds = reshape(obj.num_vars + (1:obj.nJL),obj.nJL,1);
       
@@ -132,13 +118,6 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
       obj.jl_ub_ind = find(jl_ub ~= inf);
       obj = obj.addDecisionVariable(obj.nJL);
       
-      % joint limit complementarity slacks
-      njlSlack = obj.nJL;
-      obj.jlcompl_slack_inds = reshape(obj.num_vars + (1:njlSlack), njlSlack, 1);
-      obj = obj.addDecisionVariable(njlSlack);
-      
-      
-
       obj = addDynamicConstraints(obj,x_dimensions_to_ignore);
       
       % todo: state and input constraints
@@ -164,13 +143,10 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
         % positivity of contact forces
         bounds = ones(numel(obj.l_inds),1);
         obj = obj.addConstraint(BoundingBoxConstraint(bounds*0, bounds*Inf), obj.l_inds);
-        % positivity of nonlincompl slacks
-        bounds = ones(numel(obj.nonlincompl_slack_inds),1);
-        obj = obj.addConstraint(BoundingBoxConstraint(bounds*0, bounds*Inf), obj.nonlincompl_slack_inds);
-        
-        nonlincomplCost = FunctionHandleConstraint(0,0,nQ + obj.nC*(1+obj.nD) + obj.nC,@obj.nonlincompl_fun);
+
+        nonlincomplCost = FunctionHandleConstraint(0,0,nQ + obj.nC*(1+obj.nD),@obj.nonlincompl_fun);
         %nonlincomplCost.grad_method = 'numerical';
-        obj = obj.addCost(nonlincomplCost,{obj.q_inds;obj.l_inds;obj.nonlincompl_slack_inds});
+        obj = obj.addCost(nonlincomplCost,{obj.q_inds;obj.l_inds});
         
         % friction cone description
         %  0 <= mu*lambda_N - sum(lambda_fi)
@@ -191,57 +167,52 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
         [r_jl, M_jl] = jointLimitConstraints(obj.plant,zeros(nQ,1));
         obj = obj.addConstraint(LinearConstraint(-r_jl(1:obj.nJL/2), r_jl((obj.nJL/2+1):end), M_jl(1:obj.nJL/2,:)), [obj.q_inds]);
         % restoring force at joint limits with relaxed complementarity
-        jlcomplCost = FunctionHandleConstraint(0,0,nQ + obj.nJL + obj.nJL, @obj.jlcompl_fun);
-        obj = obj.addCost(jlcomplCost, {obj.q_inds; obj.ljl_inds; obj.jlcompl_slack_inds});
+        jlcomplCost = FunctionHandleConstraint(0,0,nQ + obj.nJL, @obj.jlcompl_fun);
+        obj = obj.addCost(jlcomplCost, {obj.q_inds; obj.ljl_inds});
       end
       
     end
     
     % joint limit complementarity constraints:
     %   lambda_jl /perp [q - lb_jl; -q + ub_jl]
-    function [f,df] = jlcompl_fun(obj, q, lambda, slack)
+    function [f,df] = jlcompl_fun(obj, q, lambda)
         nq = obj.plant.getNumPositions;
         v = q*0;
         
         [r_jl,M_jl] = jointLimitConstraints(obj.plant,zeros(nq,1));
         
         f = 0;
-        df = zeros(1,nq+obj.nJL+obj.nJL);
+        df = zeros(1,nq+obj.nJL);
         
-        err = lambda .* (M_jl*q + r_jl) - slack;
+        err = lambda .* (M_jl*q + r_jl);
         
         f = f + err.'*err;
         df(1:nq) = df(1:nq) + 2 * err.' * (repmat(lambda, 1, nq) .* M_jl);
         df(nq+1:nq+obj.nJL) = 2 * err.' * repmat(M_jl*q + r_jl, 1, obj.nJL);
-        df(nq+obj.nJL+1:end) = 2 * err.' * (-eye(obj.nJL));
         
         f = f * obj.jlcompl_scale;
         df = df * obj.jlcompl_scale;
-        
-        % penalize slack
-        f = f + obj.jlcompl_slack_scale * (slack.'*slack);
-        df(nq+obj.nJL+1:end) = df(nq+obj.nJL+1:end) + obj.jlcompl_slack_scale*2*slack.';
     end
     
     % nonlinear complementarity constraints:
-    %   lambda_N /perp phi(q) -> lambda_N * phi(q) - slack = 0, penalized quadratically
+    %   lambda_N /perp phi(q) -> lambda_N * phi(q) = 0, penalized quadratically
     % x = [q;lambda_N;lambda_F1;lambda_f2](each contact sequentially)
-    function [f,df] = nonlincompl_fun(obj, q, lambda, slack)
+    function [f,df] = nonlincompl_fun(obj, q, lambda)
         nq = obj.plant.getNumPositions;
         v = q*0;
         
         [phi,normal,d,xA,xB,idxA,idxB,mu,n,D,dn,dD] = obj.plant.contactConstraints(q,obj.options.multiple_contacts,obj.options.active_collision_options);
         
         f = 0;
-        df = zeros(1,nq+obj.nC*(1+obj.nD)+obj.nC);
+        df = zeros(1,nq+obj.nC*(1+obj.nD));
         
         % nonpenetration
         err = phi(phi<0);
         f = f + obj.penetration_scale*(err.'*err);
         df(1:nq) = df(1:nq) + sum(2*obj.penetration_scale*repmat(err,1,nq).*n(phi<0,:));
         
-        % lambda_N * phi(q) - slack = 0
-        err = phi.*lambda(1:obj.nD+1:end) - slack;
+        % lambda_N * phi(q) = 0
+        err = phi.*lambda(1:obj.nD+1:end);
         
         f = f + err.'*err;
         
@@ -249,16 +220,9 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
         lambdaNInds = (nq+1):obj.nD+1:(nq+obj.nC*(obj.nD+1));
         df(lambdaNInds) = df(lambdaNInds) + ...
             (2*err.*phi).';
-        slack1Inds = nq+obj.nD*obj.nC+obj.nC+1:nq+obj.nD*obj.nC+obj.nC+obj.nC;
-        df(slack1Inds) = df(slack1Inds) + ...
-            (2*err.*-1).';
         
         f = f * obj.nonlincompl_scale;
         df = df * obj.nonlincompl_scale;
-        
-        % penalize slack
-        f = f + obj.nonlincompl_slack_scale * (slack.'*slack);
-        df( (nq + obj.nC*(obj.nD+1) + 1) : end) = df(nq + obj.nC*(obj.nD+1) + 1 : end) + obj.nonlincompl_slack_scale*2*slack.';
     end
     
     function [f,df] = dynamics_constraint_fun(obj,q0,u,lambda,lambda_jl)
@@ -365,9 +329,6 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
           stateguess.l = (J.') \ (C - B*zeros(nU,1));
         end
         z0(obj.l_inds) = stateguess.l;
-        if ~isempty(obj.nonlincompl_slack_inds)
-          z0(obj.nonlincompl_slack_inds) = stateguess.l(1:obj.nD+1:end) .* phi;
-        end
       end
       if obj.nJL > 0
         if ~isfield(stateguess,'ljl')
