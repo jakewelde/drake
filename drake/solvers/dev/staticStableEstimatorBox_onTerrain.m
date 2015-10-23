@@ -4,10 +4,12 @@ freq = rand(size(terrainX));
 Z = rand(size(terrainX))-0.5;
 Z = fft2(Z);
 alpha = 2;
-K = 0.01;
+K = 0.001;
 dist = repmat([1:size(Z,1)].', 1, size(Z,2)) .* repmat(1:size(Z,2),size(Z,1), 1);
 Z = Z ./ (K * dist.^alpha);
 terrainZ = real(ifft2(Z));
+% actually gonna use something easier that sstill breaks it
+terrainZ = 0.1*terrainY.*terrainX;
 %surf(terrainX, terrainY, terrainZ);
 
 options.terrain = RigidBodyHeightMapTerrain(terrainX(:,1),terrainY(1,:),terrainZ);
@@ -55,13 +57,17 @@ fprintf('   fixed point near that cloud fit\n');
 info
 F
 
-keyboard
+if (info == 1)
+    keyboard
 
-ts = TimeSteppingRigidBodyManipulator(urdf, 0.001, options);
-v_vis = v.setNumInputs(ts.getNumStates);
-v_vis = v_vis.setInputFrame(ts.getOutputFrame);
-output_select(1).system=1;
-output_select(1).output=1;
-sys = mimoCascade(ts,v_vis,[],[],output_select);
-'simulating to show that its a fixed pt'
-traj = sys.simulate([0,2.0], [q;zeros(6,1)]);
+    ts = TimeSteppingRigidBodyManipulator(urdf, 0.001, options);
+    v_vis = v.setNumInputs(ts.getNumStates);
+    v_vis = v_vis.setInputFrame(ts.getOutputFrame);
+    output_select(1).system=1;
+    output_select(1).output=1;
+    sys = mimoCascade(ts,v_vis,[],[],output_select);
+    'simulating to show that its a fixed pt'
+    traj = sys.simulate([0,2.0], [q;zeros(6,1)]);
+else
+    'bad info, not simulating'
+end
