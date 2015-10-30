@@ -48,7 +48,7 @@ opt = opt.setSolverOptions('snopt','print','snopt.out');
 % remove floating base fredom that we don't need
 %opt = opt.addConstraint(ConstantConstraint(zeros(3,1)), opt.q_inds([1 2 6]));
 %opt = opt.addConstraint(BoundingBoxConstraint(-0.1*ones(2,1), 0.1*ones(2,1)), opt.q_inds([4 5]));
-%opt = opt.addConstraint(BoundingBoxConstraint(0.6, 1.2), opt.q_inds([3]));
+opt = opt.addConstraint(BoundingBoxConstraint(0.6, 1.2), opt.q_inds([3]));
 %opt = opt.addCost(LinearConstraint(0, 0, -100), opt.q_inds([3]));
 
 % symmetry in the arms

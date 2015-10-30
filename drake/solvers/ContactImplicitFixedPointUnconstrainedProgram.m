@@ -20,12 +20,12 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
     jl_ub_ind % joint indices where the lower bound is finite
     nJL % number of joint limits = length([jl_lb_ind;jl_ub_ind])
     
-    total_scale = 0.001;
-    dynamics_scale = 0.000;
-    nonlincompl_scale = 1.0;
-    lincompl_scale = 1.0;
-    penetration_scale = 1.0;
-    jlcompl_scale = 1.0;
+    total_scale = 1;
+    dynamics_scale = 1.0;
+    nonlincompl_scale = 100.0;
+    lincompl_scale = 100.0;
+    penetration_scale = 10.0;
+    jlcompl_scale = 100.0;
     
     
   end
@@ -214,15 +214,15 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
         % lambda_N * phi(q) = 0
         err = phi.*lambda(1:obj.nD+1:end);
         
-        f = f + err.'*err;
-        
-        df(1:nq) = df(1:nq) + sum( 2*repmat(err, 1, nq).*n.*repmat(lambda(1:obj.nD+1:end), 1, nq) );
+        % L2
+        f = f + err.'*err * obj.nonlincompl_scale;
+        df(1:nq) = df(1:nq) + obj.nonlincompl_scale*sum( 2*repmat(err, 1, nq).*n.*repmat(lambda(1:obj.nD+1:end), 1, nq) );
         lambdaNInds = (nq+1):obj.nD+1:(nq+obj.nC*(obj.nD+1));
         df(lambdaNInds) = df(lambdaNInds) + ...
-            (2*err.*phi).';
+            obj.nonlincompl_scale*(2*err.*phi).';
         
-        f = f * obj.nonlincompl_scale;
-        df = df * obj.nonlincompl_scale;
+        f = f;
+        df = df;
     end
     
     function [f,df] = dynamics_constraint_fun(obj,q0,u,lambda,lambda_jl)
@@ -316,7 +316,10 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
       
       if ~isfield(stateguess,'l') && ~isfield(stateguess, 'u')
           % jointly calculate contact force and control input guess
-          lu = [J.' B] \ C;
+          % todo: joint limits might be needed here.
+          lu = zeros(nU+nl, 1);
+          legal_J = J(phi==0, :);
+          lu([find(phi==0); [(nl+1):nl+nU]]) = [legal_J.' B] \ C;
           stateguess.l = lu(1:nl);
           stateguess.u = lu((nl+1):end);
       end
@@ -361,23 +364,6 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
       z0 = prog.getInitialVars(guess);
 %       %z0 = z0 + rand;
       [z,F,info,infeasible_constraint_name] = prog.solve(z0);
-%       
-%       i = 1;
-%       z = z0;
-%       alpha = 0.000005;
-%       while (i < 10000)
-%           [f,df] = prog.objective(z);
-%           z = z - alpha * df.';
-%           z(z > prog.x_ub) = prog.x_ub(z > obj.x_ub);
-%           z(z < prog.x_lb) = prog.x_lb(z < obj.x_lb);
-%           f
-%           if (norm(df) < 1E-3)
-%               i = 100000;
-%           end
-%           i = i + 1;
-%           alpha = alpha * 0.999;
-%           info = 1;
-%       end
       
       qstar = z(obj.q_inds);
       ustar = Point(obj.plant.getInputFrame,z(obj.u_inds));
