@@ -17,7 +17,7 @@ v = p.constructVisualizer();
 
 nq = p.getNumPositions();
 
-q_gt = [0 0 0.6 0 0 0].';
+q_gt = [0 0 0.75 0 0 0].';
 v.draw(0, q_gt);
 
 % generate a point cloud
@@ -51,6 +51,8 @@ options.compl_slack = scale*0.01;
 options.lincompl_slack = scale*0.001;
 options.jlcompl_slack = scale*0.01;
 opt = ContactImplicitFixedPointUnconstrainedProgram(p, [], options); 
+%opt = ContactImplicitFixedPointProgram(p, [], options); 
+%opt = ContactImplicitLogForceFixedPointProgram(p, [], options); 
 opt = opt.setSolverOptions('snopt','DerivativeOption', 0);
 opt = opt.setSolverOptions('snopt','VerifyLevel', 0);
 opt = opt.setSolverOptions('snopt','MajorOptimalityTolerance', 1E-5);
@@ -62,7 +64,7 @@ sdfCost = FunctionHandleConstraint(0,0,nq, @(q)staticStableEstimatorBox_SDFObjec
 opt = opt.addCost(sdfCost, opt.q_inds);
 
 guess = struct();
-guess.q = q_gt + 0.1*(2*rand(6,1)-1);
+guess.q = q_gt + 0.05*(2*rand(6,1)-1);
 [q, u, l, info, F] = opt.findFixedPoint(guess, v);
 %q = opt.solve(guess.q);
 

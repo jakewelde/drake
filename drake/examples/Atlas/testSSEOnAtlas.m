@@ -34,41 +34,6 @@ l_leg_joints = find(strncmp(joints, 'l_leg_', 5));
 r_leg_joints = find(strncmp(joints, 'r_leg_', 5));
 n_leg_joints = numel(r_leg_joints);
 
-scale = 1;
-options.compl_slack = scale*0.01;
-options.lincompl_slack = scale*0.001;
-options.jlcompl_slack = scale*0.01;
-opt = ContactImplicitFixedPointUnconstrainedProgram(r.getManipulator(), [], options); 
-
-
-opt = opt.setSolverOptions('snopt','DerivativeOption', 0);
-opt = opt.setSolverOptions('snopt','VerifyLevel', 0);
-opt = opt.setSolverOptions('snopt','MajorOptimalityTolerance', 1E-5);
-opt = opt.setSolverOptions('snopt','SuperbasicsLimit', 10000);
-opt = opt.setSolverOptions('snopt','print','snopt.out');
-
-
-%opt = opt.addInputCost(QuadraticSumConstraint(0,0,0.1*eye(nu),zeros(nu,1)));
-% remove floating base fredom that we don't need
-%opt = opt.addConstraint(ConstantConstraint(zeros(3,1)), opt.q_inds([1 2 6]));
-%opt = opt.addConstraint(BoundingBoxConstraint(-0.1*ones(2,1), 0.1*ones(2,1)), opt.q_inds([4 5]));
-%opt = opt.addConstraint(BoundingBoxConstraint(0.6, 1.2), opt.q_inds([3]));
-%opt = opt.addCost(LinearConstraint(0, 0, -100), opt.q_inds([3]));
-
-% symmetry in the arms
-flip = [-1 -1 1 -1 1 -1 1];
-A = [eye(n_arm_joints) -diag(flip)];
-%opt = opt.addConstraint(LinearConstraint(zeros(n_arm_joints,1), zeros(n_arm_joints,1), A), [l_arm_joints;r_arm_joints]);
-
-% symmetry in the legs
-flip = [1 -1 1 1 1 -1];
-A = [eye(n_leg_joints) -diag(flip)];
-%opt = opt.addConstraint(LinearConstraint(zeros(n_leg_joints,1), zeros(n_leg_joints,1), A), [l_leg_joints;r_leg_joints]);
-
-% require contact force from feet
-%opt = opt.addConstraint(BoundingBoxConstraint(zeros(opt.nC,1)+1, zeros(opt.nC,1)+Inf), opt.l_inds(1:(opt.nD+1):end));
-%cp = 8;
-%opt = opt.addCost(FunctionHandleConstraint(0, 0, nq, @feet_on_ground_constraint_fun), {opt.q_inds});
 
 % ytraj
 l = load('walking_traj.mat');
@@ -99,23 +64,66 @@ lcmgl.glColor3f(1,0,0);
 lcmgl.points(pointsInWorldFrame(1,:), pointsInWorldFrame(2,:), pointsInWorldFrame(3,:));
 lcmgl.switchBuffers();
 
-% INFORM THIS BY THE JOINT ENCODERS?
-% MAYBE THIS MAKES MORE SENSE IN LOW DIMENSION?
-% DUNNO...
-
-
-
-% with an SDF objective on those raycast points
-sdfCost = FunctionHandleConstraint(0,0,nq, @(q)staticStableEstimatorBox_SDFObjective(q,r_bc.getManipulator(),pointsInWorldFrame));
-%sdfCost.grad_method = 'numerical';
-opt = opt.addCost(sdfCost, opt.q_inds);
-
-
+scale_sequence = [0.00001;];
 
 guess = struct();
-guess.q = double(q_gt) + [0.15*(rand(6,1)-0.5); 1.0*(rand(numel(q_gt)-6, 1)-0.5)];
-v.draw(0, guess.q);
-[q, u, l, info, F] = opt.findFixedPoint(guess, v);
+guess.q = double(q_gt) + [0.1*(rand(6,1)-0.5); 0.25*(rand(numel(q_gt)-6, 1)-0.5)];
+
+for i=1:numel(scale_sequence)
+    scale = 1;
+    options.compl_slack = scale*0.01;
+    options.lincompl_slack = scale*0.001;
+    options.jlcompl_slack = scale*0.01;
+    options.scaling = scale_sequence(i);
+    opt = ContactImplicitFixedPointUnconstrainedProgram(r.getManipulator(), [], options); 
+
+
+    opt = opt.setSolverOptions('snopt','DerivativeOption', 0);
+    opt = opt.setSolverOptions('snopt','VerifyLevel', 0);
+    opt = opt.setSolverOptions('snopt','MajorOptimalityTolerance', 1E-5);
+    opt = opt.setSolverOptions('snopt','SuperbasicsLimit', 10000);
+    opt = opt.setSolverOptions('snopt','print','snopt.out');
+
+
+    %opt = opt.addInputCost(QuadraticSumConstraint(0,0,0.1*eye(nu),zeros(nu,1)));
+    % remove floating base fredom that we don't need
+    %opt = opt.addConstraint(ConstantConstraint(zeros(3,1)), opt.q_inds([1 2 6]));
+    %opt = opt.addConstraint(BoundingBoxConstraint(-0.1*ones(2,1), 0.1*ones(2,1)), opt.q_inds([4 5]));
+    %opt = opt.addConstraint(BoundingBoxConstraint(0.6, 1.2), opt.q_inds([3]));
+    %opt = opt.addCost(LinearConstraint(0, 0, -100), opt.q_inds([3]));
+
+    % symmetry in the arms
+    flip = [-1 -1 1 -1 1 -1 1];
+    A = [eye(n_arm_joints) -diag(flip)];
+    %opt = opt.addConstraint(LinearConstraint(zeros(n_arm_joints,1), zeros(n_arm_joints,1), A), [l_arm_joints;r_arm_joints]);
+
+    % symmetry in the legs
+    flip = [1 -1 1 1 1 -1];
+    A = [eye(n_leg_joints) -diag(flip)];
+    %opt = opt.addConstraint(LinearConstraint(zeros(n_leg_joints,1), zeros(n_leg_joints,1), A), [l_leg_joints;r_leg_joints]);
+
+    % require contact force from feet
+    %opt = opt.addConstraint(BoundingBoxConstraint(zeros(opt.nC,1)+1, zeros(opt.nC,1)+Inf), opt.l_inds(1:(opt.nD+1):end));
+    %cp = 8;
+    %opt = opt.addCost(FunctionHandleConstraint(0, 0, nq, @feet_on_ground_constraint_fun), {opt.q_inds});
+
+
+    % INFORM THIS BY THE JOINT ENCODERS?
+    % MAYBE THIS MAKES MORE SENSE IN LOW DIMENSION?
+    % DUNNO...
+
+    % with an SDF objective on those raycast points
+    sdfCost = FunctionHandleConstraint(0,0,nq, @(q)staticStableEstimatorBox_SDFObjective(q,r_bc.getManipulator(),pointsInWorldFrame));
+    %sdfCost.grad_method = 'numerical';
+    opt = opt.addCost(sdfCost, opt.q_inds);
+
+    v.draw(0, guess.q);
+    [q, u, l, info, F] = opt.findFixedPoint(guess, v);
+    guess.q = q;
+    guess.u = u;
+    guess.l = l;
+    info
+end
 
 function [f,df] = feet_on_ground_constraint_fun(q)
     colopts = opt.options.active_collision_options;

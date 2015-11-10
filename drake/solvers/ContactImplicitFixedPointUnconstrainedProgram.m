@@ -65,6 +65,9 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
       if ~isfield(options, 'multiple_contacts')
         options.multiple_contacts = false;
       end
+      if ~isfield(options, 'scaling')
+          options.scaling = 1;
+      end
 
       typecheck(plant,'RigidBodyManipulator');
       if ~isTI(plant), error('only makes sense for time invariant systems'); end
@@ -81,7 +84,7 @@ classdef ContactImplicitFixedPointUnconstrainedProgram < NonlinearProgram
       positionNames = positionNames(1:nQ);
       obj = obj@NonlinearProgram(nQ+nU,vertcat(positionNames, getCoordinateNames(plant.getInputFrame)));
 
-      scale = obj.total_scale;
+      scale = obj.total_scale * options.scaling;
       obj.dynamics_scale = obj.dynamics_scale*scale;
       obj.nonlincompl_scale = obj.nonlincompl_scale*scale;
       obj.lincompl_scale = obj.lincompl_scale*scale;
