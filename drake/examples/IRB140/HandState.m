@@ -9,6 +9,12 @@ classdef HandState < SingletonCoordinateFrame
       manipStateFrame = manipStateFrame.getFrameByNum(ind);
       coordinates = manipStateFrame.getCoordinateNames();
       obj = obj@SingletonCoordinateFrame(name,length(coordinates),'x',coordinates);
+
+      positionFrame = r.getManipulator().getPositionFrame();
+      if getNumFrames(positionFrame)==1 && isempty(findTransform(obj,positionFrame))
+        obj.addProjectionTransformByCoordinateNames(positionFrame);
+      end
+
     end
   end
 end

@@ -4,11 +4,16 @@ classdef IRB140State < SingletonCoordinateFrame
     function obj=IRB140State(r)
       typecheck(r,{'TimeSteppingRigidBodyManipulator','RigidBodyManipulator'});
       manipStateFrame = r.getManipulator().getStateFrame();
-      if (r.hands > 0)
+      if (isa(manipStateFrame.getFrameByNum(1), 'MultiCoordinateFrame'))
         manipStateFrame = manipStateFrame.getFrameByNum(1);
       end
       coordinates = manipStateFrame.getCoordinateNames();
       obj = obj@SingletonCoordinateFrame('IRB140State',length(coordinates),'x',coordinates);
+      
+      positionFrame = r.getManipulator().getPositionFrame();
+      if getNumFrames(positionFrame)==1 && isempty(findTransform(obj,positionFrame))
+        obj.addProjectionTransformByCoordinateNames(positionFrame);
+      end
     end
   end
 end

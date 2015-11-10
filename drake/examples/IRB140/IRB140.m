@@ -73,6 +73,8 @@ classdef IRB140 < TimeSteppingRigidBodyManipulator
             arm_state_frame = IRB140State(obj);
           end
         end
+        % assuming manip and tsrbm have same state/toutput... true unless
+        % we put on time-stepping sensors!
         tsmanip_state_frame = obj.getStateFrame();
         if tsmanip_state_frame.dim>arm_state_frame.dim
           id = findSubFrameEquivalentModuloTransforms(tsmanip_state_frame,arm_state_frame);
@@ -82,9 +84,18 @@ classdef IRB140 < TimeSteppingRigidBodyManipulator
           state_frame = arm_state_frame;
         end
         obj.manip = obj.manip.setStateFrame(arm_state_frame);
-        obj.manip = obj.manip.setOutputFrame(arm_state_frame);
         obj = obj.setStateFrame(state_frame);
-        obj = obj.setOutputFrame(state_frame);
+        
+        tsmanip_output_frame = getOutputFrame(obj.manip);
+        if tsmanip_output_frame.dim>arm_state_frame.dim
+          tsmanip_output_frame.frame{1} = arm_state_frame;
+          output_frame = tsmanip_output_frame;
+        else
+          output_frame = arm_state_frame;
+        end
+        
+        obj.manip = obj.manip.setOutputFrame(output_frame);
+        obj = obj.setOutputFrame(output_frame);
         
         if (obj.hands > 0)
           input_frame = getInputFrame(obj);
