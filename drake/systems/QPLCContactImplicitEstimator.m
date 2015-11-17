@@ -34,7 +34,7 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
       plant_output_frames = getOutputFrame(plant);
       obj.nz = plant.getNumOutputs;
       obj.nx = plant.getNumStates;
-      obj.nC = obj.plant.getNumContactPairs;
+      obj.nC = plant.getNumContactPairs;
       [~,~,d] = plant.contactConstraints(zeros(plant.getNumPositions,1));
       obj.nD = 2*length(d);
       obj.plant = plant;
@@ -75,6 +75,7 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
       w = varargin{1};
       u = w(1:obj.nu);
       x_gt = w(obj.nu+1:obj.nu+obj.nx);
+      nl = obj.nC*(obj.nD+1);
       z = reshape(w(obj.nu+obj.nx+1:end), 3, (length(w)-obj.nx-obj.nu)/3);
       dt = obj.getSampleTime();
       dt = dt(1);
@@ -104,14 +105,14 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
           [Hk,Ck,Bk] = obj.plant.manipulatorDynamics(qlast, vlast);
           
           % Genereate Jk
-          if obj.nc>0
-              [~,~,~,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(qlast,false,struct('terrain_only', true));
+          if obj.nC>0
+              [~,~,~,~,~,~,~,~,n,D,~,~] = obj.plant.contactConstraints(qlast,false,struct('terrain_only', false));
               % construct J and dJ from n,D,dn, and dD so they relate to the
               % lambda vector
               Jk = zeros(nl,nq);
               Jk(1:2+obj.nD:end,:) = n;
               for j=1:length(D),
-                  J(1+j:2+obj.nD:end,:) = D{j};
+                  Jk(1+j:2+obj.nD:end,:) = D{j};
               end
           end
           
@@ -142,10 +143,11 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
               % surface of the object positioned via the LAST state estimate
              
               % can we vectorize better?    
-              nvars = nq + nu + obj.nC*(obj.nD+1);
+              nvars = 2*nq + obj.nu + obj.nC*(obj.nD+1);
               qinds = 1:nq;
-              uinds = (nq+1):(nq+nu);
-              lambdainds = (nq+nu+1):(nq+nu+obj.nC*(obj.nD+1));
+              vinds = nq+1:2*nq;
+              uinds = (2*nq+1):(2*nq+obj.nu);
+              lambdainds = (2*nq+obj.nu+1):(2*nq+obj.nu+obj.nC*(obj.nD+1));
               
               f = zeros(nvars, 1);
               Q = zeros(nvars, nvars);
@@ -158,27 +160,30 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
                   on_this_body = sum(this_body);
                   [~, J_zi] = obj.plant.forwardKin(kinsol, unique_bodies(k), body_z_prime(:, this_body));
                   Ks = z(:, this_body) - z_prime(:, this_body) + reshape(J_zi*qlast, 3, on_this_body);
-                  f = f - pointcloud_weight*(2 * reshape(Ks, on_this_body*3, 1).' * J_zi).';
-                  Q = Q + pointcloud_weight*2*(J_zi.' * J_zi).';
+                  f(qinds) = f(qinds) - pointcloud_weight*(2 * reshape(Ks, on_this_body*3, 1).' * J_zi).';
+                  Q(qinds, qinds) = Q(qinds, qinds) + pointcloud_weight*2*(J_zi.' * J_zi).';
                   K = K + pointcloud_weight*sum(sum(Ks.*Ks));
               end
               
               euler_weight = 0.1;
               target_q = qlast + dt * vlast;
-              f = f - euler_weight * (2 * target_q);
-              Q = Q + euler_weight * (2 * eye(nq));
+              f(qinds) = f(qinds) - euler_weight * (2 * target_q);
+              Q(qinds, qinds) = Q(qinds, qinds) + euler_weight * (2 * eye(nq));
               K = K + euler_weight * (target_q.' * target_q);
               
-              dynamics_weight = 1.0;
-              Hkinv = Hk^-1;
-              C = dt*Hkinv*Ck - xk;
-              B = dt*Hkinv*Bk;
-              J = dt*Hkinv*Jk';
-              f = f - euler_weight * (2 * target_q);
-              Q = Q + euler_weight * (2 * eye(nq));
-              K = K + euler_weight * (target_q.' * target_q);
-              
+               dynamics_weight = 1.0;
+               Hkinv = Hk^-1;
+               C = dt*Hkinv*Ck - xlast(nq+1:;
+               B = dt*Hkinv*Bk;
+               J = dt*Hkinv*Jk';
+               A = [eye(nq) -B -J];
+               f = f + dynamics_weights * (C.'*C);
+               Q = Q + dynamics_weight * 2 * (A.' * A);
+               K = K + dynamics_weight * 2 * (C.' * A);
+               
               % If Q isn't full rank we'll have to hack it to be...
+              % fill in unspecified cols of Q
+              Q = Q + diag(sum(Q)==0);
               while min(eig(Q)) < 0
                   'insufficient data'
                   [V,D] = eig(Q);
@@ -196,7 +201,10 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
     %           end
 
               solver = QuadraticProgram(Q, f);
-              [qlast, F, info, active] = solver.solve(qlast);
+              [v, F, info, active] = solver.solve(qlast);
+              qlast = v(qinds);
+              ulast = v(uinds);
+              lambdalast = v(lambdainds);
               F = F + K
               xlast = [qlast; x_gt(nq+1:end)]
               
