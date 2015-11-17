@@ -5,6 +5,8 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
       nu;
       nx;
       nz;
+      nC;
+      nD;
       plant;
       v;
       sensor_data;
@@ -32,6 +34,9 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
       plant_output_frames = getOutputFrame(plant);
       obj.nz = plant.getNumOutputs;
       obj.nx = plant.getNumStates;
+      obj.nC = obj.plant.getNumContactPairs;
+      [~,~,d] = plant.contactConstraints(zeros(plant.getNumPositions,1));
+      obj.nD = 2*length(d);
       obj.plant = plant;
       
       obj.v = obj.plant.constructVisualizer();
@@ -96,7 +101,21 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
           vlast = xlast(nq+1:end);
           kinsol = obj.plant.doKinematics(qlast);
           [phi,n,z_prime,body_z_prime,body_idx] = obj.plant.getManipulator.signedDistances(kinsol,z,false);
-      
+          [Hk,Ck,Bk] = obj.plant.manipulatorDynamics(qlast, vlast);
+          
+          % Genereate Jk
+          if obj.nc>0
+              [~,~,~,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(qlast,false,struct('terrain_only', true));
+              % construct J and dJ from n,D,dn, and dD so they relate to the
+              % lambda vector
+              Jk = zeros(nl,nq);
+              Jk(1:2+obj.nD:end,:) = n;
+              for j=1:length(D),
+                  J(1+j:2+obj.nD:end,:) = D{j};
+              end
+          end
+          
+          
           obj.lcmgl.glColor3f(1, 0, 0);
           obj.lcmgl.points(z(1,:),z(2,:),z(3,:));
           obj.lcmgl.glColor3f(0, 1, 0);
@@ -123,9 +142,15 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
               % surface of the object positioned via the LAST state estimate
              
               % can we vectorize better?    
-              f = zeros(nq, 1);
-              Q = zeros(nq, nq);
+              nvars = nq + nu + obj.nC*(obj.nD+1);
+              qinds = 1:nq;
+              uinds = (nq+1):(nq+nu);
+              lambdainds = (nq+nu+1):(nq+nu+obj.nC*(obj.nD+1));
+              
+              f = zeros(nvars, 1);
+              Q = zeros(nvars, nvars);
               K = 0;
+              
               unique_bodies = unique(body_idx);
               pointcloud_weight = 1.0 / numel(body_idx);
               for k=1:numel(unique_bodies)
@@ -140,6 +165,15 @@ classdef QPLCContactImplicitEstimator < DrakeSystem
               
               euler_weight = 0.1;
               target_q = qlast + dt * vlast;
+              f = f - euler_weight * (2 * target_q);
+              Q = Q + euler_weight * (2 * eye(nq));
+              K = K + euler_weight * (target_q.' * target_q);
+              
+              dynamics_weight = 1.0;
+              Hkinv = Hk^-1;
+              C = dt*Hkinv*Ck - xk;
+              B = dt*Hkinv*Bk;
+              J = dt*Hkinv*Jk';
               f = f - euler_weight * (2 * target_q);
               Q = Q + euler_weight * (2 * eye(nq));
               K = K + euler_weight * (target_q.' * target_q);
