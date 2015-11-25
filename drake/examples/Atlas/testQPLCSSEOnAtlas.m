@@ -21,10 +21,10 @@ r = Atlas(fullfile(getDrakePath,'examples','Atlas','urdf','atlas_minimal_contact
 %r = r.removeCollisionGroupsExcept({'heel','toe'});
 r = compile(r);
 % Instrument it
-pitch = 0.5;
-yaw = 0.5;
-rows = 100;
-cols = 100;
+pitch = 0.8;
+yaw = 0.8;
+rows = 150;
+cols = 150;
 scanOffset = [1.5;0;0.5;0;0;pi];
 rgbd_frame = RigidBodyFrame(1,scanOffset(1:3),scanOffset(4:6),'rgbdframe');
 r_collision = r_collision.addFrame(rgbd_frame);
@@ -95,7 +95,7 @@ plancontroller = atlasControllers.AtlasPlanEvalAndControlSystem(r, control, plan
 sys = feedback(r_collision, plancontroller);
 
 % Construct our QP estimator
-qplc_est = QPLCContactImplicitEstimator(r_collision, x0, []);
+qplc_est = QPDART(r_collision, x0, []);
 clear outs;
 for i=1:sys.getOutputFrame.getNumFrames
    outs(i).system = 1;
