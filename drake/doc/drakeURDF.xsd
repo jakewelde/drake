@@ -884,64 +884,9 @@ f_friction = min(1,max(-1,qd./m.coulomb_window')).*m.coulomb_friction' + m.dampi
     <xs:complexType name="joint_reference">
         <xs:attribute name="name" type="xs:string"/>
     </xs:complexType>
-    <xs:complexType name="gazebo_sensor">
-        <xs:sequence>
-            <xs:element name="pose" type="matlab_parameter_expression"/>
-            <xs:element name="visualize" type="boolean">
-                <xs:annotation>
-                    <xs:documentation>Only used for ray and gpu_ray</xs:documentation>
-                </xs:annotation>
-            </xs:element>
-
-            <!--
-            <visualize>false</visualize>
-      <update_rate>40</update_rate>
-      <ray>
-        <scan>
-          <horizontal>
-            <samples>1081</samples>
-            <resolution>1</resolution>
-            <min_angle>-2.356194</min_angle>
-            <max_angle>2.356194</max_angle>
-          </horizontal>
-        </scan>
-        <range>
-          <min>0.10</min>
-          <max>30.0</max>
-          <resolution>0.01</resolution>
-        </range>
-        <noise>
-          <type>gaussian</type>
-          <mean>0.0</mean>
-          <stddev>0.01</stddev>
-        </noise>
-      </ray>
--->
-            <xs:choice>
-                <xs:element name="ray" type="ray">
-                    <xs:annotation>
-                        <xs:documentation>Ray set specifications.</xs:documentation>
-                    </xs:annotation>
-                </xs:element>
-                <xs:element name="imu">
-                    <xs:annotation>
-                        <xs:documentation>IMU noise specifications can go here, but are not yet supported.</xs:documentation>
-                    </xs:annotation>
-                </xs:element>
-            </xs:choice>
-        </xs:sequence>
-        <xs:attribute name="name" type="xs:string"/>
-        <xs:attribute name="type" type="sensor_type">
-            <xs:annotation>
-                <xs:documentation>    - 'gpu_ray' or 'ray' for raycasted sensor type
-    - 'imu' for inertial measurement unit
-                </xs:documentation>
-            </xs:annotation>
-        </xs:attribute>
-    </xs:complexType>
     <xs:complexType name="gazebo">
         <xs:sequence>
-            <xs:element maxOccurs="unbounded" minOccurs="0" name="sensor" type="gazebo_sensor"/>
+            <xs:element maxOccurs="unbounded" minOccurs="0" name="sensor" type="sensor"/>
         </xs:sequence>
         <xs:attribute name="reference" type="xs:string"/>
     </xs:complexType>
