@@ -44,25 +44,31 @@ classdef PlanarRigidBodyVisualizer < RigidBodyVisualizer
       warning(w);      
     end
     
-    function draw(obj,t,x)
-
+    function drawBody(obj, t, x, extra)
+      if nargin == 3
+          extra = 0;
+      end
+      
       n = obj.model.num_positions;
       q = x(1:n); %qd=x(n+(1:n));
       kinsol = obj.model.doKinematics(q);
       
-      % for debugging:
-      %co = get(gca,'ColorOrder');
-      %h = [];
-      % end debugging
-
       for i=1:length(obj.model.body)
         for j=1:length(obj.body(i).x)
-          c = (1-obj.fade_percent)*obj.body(i).c{j} + obj.fade_percent*obj.fade_color;
+          if extra
+            c = (1-0.5)*obj.body(i).c{j} + 0.5 * [1 0 1];
+          else
+            c = (1-obj.fade_percent)*obj.body(i).c{j} + obj.fade_percent*obj.fade_color;
+          end
           pts = obj.Tview*forwardKin(obj.model,kinsol,i,[obj.body(i).x{j}(:),obj.body(i).y{j}(:),obj.body(i).z{j}(:)]');
           x = reshape(pts(1,:),size(obj.body(i).x{j}));
           y = reshape(pts(2,:),size(obj.body(i).y{j}));
           z = reshape(pts(3,:),size(obj.body(i).z{j}));
-          patch(x,y,z,c,'LineWidth',.01,'EdgeColor',obj.fade_percent*obj.fade_color); %0*xpts,'FaceColor','flat','FaceVertexCData',body.geometry.c);
+          if extra
+            patch(x,y,z,c,'LineWidth',.01,'EdgeColor',obj.fade_percent*obj.fade_color, 'FaceAlpha', 0.1); %0*xpts,'FaceColor','flat','FaceVertexCData',body.geometry.c);
+          else
+            patch(x,y,z,c,'LineWidth',.01,'EdgeColor',obj.fade_percent*obj.fade_color); %0*xpts,'FaceColor','flat','FaceVertexCData',body.geometry.c);
+          end
           % patch(xpts,ypts,body.geometry{j}.c,'EdgeColor','none','FaceAlpha',1); %0*xpts,'FaceColor','flat','FaceVertexCData',body.geometry.c);
 
           % for debugging:
@@ -84,6 +90,20 @@ classdef PlanarRigidBodyVisualizer < RigidBodyVisualizer
           end
         end
       end
+    end
+    
+    function draw(obj,t,x)
+
+      n = obj.model.num_positions;
+      q = x(1:n); %qd=x(n+(1:n));
+      kinsol = obj.model.doKinematics(q);
+      
+      % for debugging:
+      %co = get(gca,'ColorOrder');
+      %h = [];
+      % end debugging
+
+      obj.drawBody(t, x);
       
       for j=1:length(obj.model.position_constraints)
         % todo: generalize this to all position constraints?
@@ -128,7 +148,7 @@ classdef PlanarRigidBodyVisualizer < RigidBodyVisualizer
     end
   end
 
-  properties (Access=protected)
+  properties
     Tview;
     body;  % body(i).x{j} and body(i).c{j} describe the jth geometry on body i
     x_axis_label = 'x';
