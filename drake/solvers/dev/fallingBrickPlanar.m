@@ -47,5 +47,4 @@ for i=1:sys.getOutputFrame.getNumFrames
 end
 sys = mimoCascade(sys, v, cons, [], outs);
 'starting sim'
-x0 
 ytraj = simulate(sys,[0 2],[x0; PF.getInitialState()]);
