@@ -52,7 +52,7 @@ classdef Visualizer < DrakeSystem
       if (obj.preserve_view)
         [az,el]=view;
       end
-      clf; hold on;
+      %clf; hold on;
       draw(obj,t,y);
       if (obj.display_time)
         title(['t = ', num2str(t,'%.2f') ' sec']);
