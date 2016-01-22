@@ -69,13 +69,32 @@ classdef PFModeHopping < DrakeSystem
         inds = obj.num_particles+1 + obj.nx*(i-1): obj.num_particles + obj.nx*i;
     end
     
-    function xnext = update(obj,t,x,varargin)
+    function xnext = update(obj,t,xin,varargin)
         % if we have inputs parse them now
         % but we don't have inputs yet...
-        xnext = x;
+        u = [];
+        xnext = xin;
+        manip = obj.plant.getManipulator();
         for i=1:obj.num_particles
-           inds = obj.getParticleStateInds(i);
-           xnext(inds) = obj.plant.update(t, x(inds), []) + randn(obj.nx, 1)*0.01;
+            inds = obj.getParticleStateInds(i);
+            % get basic info about manip in this state
+            x = xin(inds);
+            q = x(1:manip.getNumPositions);
+            v = x((manip.getNumPositions+1):end);
+            [H,C,B] = manipulatorDynamics(manip,q,v);
+            if (obj.nu > 0)
+                tau = B*u-C;
+            else
+                tau = -C;
+            end
+           
+           % no J for now. that comes next
+           
+           vd = pinv(H) * tau + pinv(H) * tau .* randn(size(v))*0.05;
+           q = q + v * obj.plant.timestep;
+           v = v + vd * obj.plant.timestep;
+           
+           xnext(inds) = [q; v];
         end
     end
     
