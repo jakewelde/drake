@@ -117,13 +117,18 @@ classdef PFModeHopping < DrakeSystem
             else
                 tau = -C;
             end
-            
-            % Consider updating contact state
-            c = rand(size(c)) > 0.5;
            
             % assemble J
             if obj.nC > 0
                 [phi,normal,~,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(q,false);
+                
+                % Consider updating contact state
+                c_active = phi < 0.1;
+                % (make it the right size -- repeat elements in place
+                % the number of times we need to fill out friction cone
+                % members)
+                c = reshape(repmat(c_active, 1, obj.nD+1).', [obj.nContactForces, 1]);
+            
                 % construct J and dJ from n,D,dn, and dD so they relate to the
                 % lambda vector
                 J = zeros(obj.nContactForces,obj.nq);
@@ -144,15 +149,25 @@ classdef PFModeHopping < DrakeSystem
             activeJ = J(c~=0, :);
             
             if min(size(activeJ)) > 0
-                % do an optimization to produce contact forces to avoid
-                % penetration
-                contactForces = rand(sum(c), 1);
-                tau = tau + activeJ.' * contactForces;
+                contactForces = zeros(size(activeJ, 1), 1);
+                
+                % cancel current velocity along normal direction to surface
+                contactForces = contactForces - pinv(activeJ).' * pinv(H) * v / obj.plant.timestep;
+                
+                % instead propel us precisely toward surface
+                distanceToSurfaceWorldFrame = normal(:, c(1:(obj.nD+1):end)~=0) .* repmat(phi(c(1:(obj.nD+1):end)~=0).', [3, 1]);
+                contactForces = contactForces + sum(pinv(activeJ).' * pinv(H) * -distanceToSurfaceWorldFrame / obj.plant.timestep, 2);
+                
+                % todo, why is this wrong
+                
+                tau = tau + H * activeJ.' * contactForces;
             end
-      
-           vd = pinv(H) * tau + pinv(H) * tau .* randn(size(v))*0.05;
-           q = q + v * obj.plant.timestep;
+           vd = pinv(H)*tau;
+            
+           v
+           vd
            v = v + vd * obj.plant.timestep;
+           q = q + v * obj.plant.timestep;
            
            xnext(inds) = [q; v];
         end
@@ -171,7 +186,7 @@ classdef PFModeHopping < DrakeSystem
       for i=1:obj.num_particles
          y = y + x(i) * x(obj.getParticleStateInds(i)); 
       end
-      y
+      y;
       
     end
   end
