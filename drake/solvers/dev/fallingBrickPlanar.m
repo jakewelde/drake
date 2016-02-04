@@ -2,7 +2,7 @@ options.terrain = RigidBodyFlatTerrain();
 options.floating = true;
 options.multiple_contacts = false;
 w = warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
-plant = PlanarRigidBodyManipulator(fullfile(getDrakePath,'systems','plants','test','FallingBrickContactPoints.urdf'),options);
+plant = PlanarRigidBodyManipulator(fullfile(getDrakePath,'systems','plants','test','FallingBrick.urdf'),options);
 warning(w);
 x0 = [0;1;0; 0; 0; 0.2];
 

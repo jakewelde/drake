@@ -101,10 +101,17 @@ classdef PFModeHopping < DrakeSystem
         % if we have inputs parse them now
         % but we don't have inputs yet...
         u = [];
-        xnext = xin;
+        inputs = obj.getInputFrame.splitCoordinates(varargin{1});
+        lidar = reshape(inputs{2}, 3, length(inputs{2})/3);
+        kinsol = obj.plant.doKinematics(inputs{1});
+        lidar = obj.plant.forwardKin(kinsol, obj.plant.findFrameId('rgbdframe'), lidar);
+        
+        xnext_pre = xin;
         manip = obj.plant.getManipulator();
         for i=1:obj.num_particles
             inds = obj.getParticleStateInds(i);
+            
+            %%  PROCESS UPDATE:
             % get basic info about manip in this state
             x = xin(inds);
             q = x(1:obj.nq);
@@ -117,75 +124,112 @@ classdef PFModeHopping < DrakeSystem
             else
                 tau = -C;
             end
+            tau = tau + randn(size(tau))*10;
            
             % assemble J
             if obj.nC > 0
                 [phi,normal,~,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(q,false);
                 
                 % Consider updating contact state
-                c_active = phi < 0.1;
-                % (make it the right size -- repeat elements in place
-                % the number of times we need to fill out friction cone
-                % members)
-                c = reshape(repmat(c_active, 1, obj.nD+1).', [obj.nContactForces, 1]);
+                c_proba = exp(-100*(phi+n*v*obj.plant.timestep))*0.5;
+                c_norm_active = rand(size(c_proba)) < c_proba;
+                
+                c_active = zeros(obj.nContactForces, 1);
+                c_active(1:(1+obj.nD):end) = c_norm_active;
             
                 % construct J and dJ from n,D,dn, and dD so they relate to the
                 % lambda vector
-                J = zeros(obj.nContactForces,obj.nq);
-                J(1:1+obj.nD:end,:) = n;
-                %dJ = zeros(obj.nContactForces*nq,nq);
-                %dJ(1:1+obj.nD:end,:) = dn;
+                J_norm = zeros(obj.nC, obj.nq);
+                J_norm = n;
                 
+                J_D = zeros(obj.nD*obj.nC, obj.nq);
                 for j=1:length(D),
-                    J(1+j:1+obj.nD:end,:) = D{j};
-                    %dJ(1+j:1+obj.nD:end,:) = dD{j};
+                    J_D(j:obj.nD:end,:) = D{j};
                 end
-                
-                %fv = fv + J'*lambda;
-                %dfv(:,1:nq) = dfv(:,1:nq) + matGradMult(dJ,lambda,true);
-                %dfv(:,1+nq+nu:nq+nu+nl) = J'*obj.options.lambda_mult;
             end
             
-            activeJ = J(c~=0, :);
-            
-            if min(size(activeJ)) > 0
-                contactForces = zeros(size(activeJ, 1), 1);
+            if sum(c_active) > 0
+                % solve linear program for contact force, velocity
+                % to satisfy (linearized) contact constraints
+                % and the dynamics
                 
-                % cancel current velocity along normal direction to surface
-                contactForces = contactForces - pinv(activeJ).' * pinv(H) * v / obj.plant.timestep;
+                % decision vars: [qdn; lambda_n]
                 
-                % instead propel us precisely toward surface
-                distanceToSurfaceWorldFrame = normal(:, c(1:(obj.nD+1):end)~=0) .* repmat(phi(c(1:(obj.nD+1):end)~=0).', [3, 1]);
-                contactForces = contactForces + sum(pinv(activeJ).' * pinv(H) * -distanceToSurfaceWorldFrame / obj.plant.timestep, 2);
+                Aeq = [H/obj.plant.timestep,  -J_norm(c_norm_active~=0, :).';
+                     J_norm(c_norm_active~=0, :)*obj.plant.timestep, zeros(sum(c_norm_active~=0), sum(c_norm_active~=0))];
+                beq = [tau + H*v/obj.plant.timestep;
+                     -phi(c_norm_active~=0)];
+                 
+                % A*x <= b
+                %A = [zeros(sum(c_norm~=0), obj.nq), -eye(sum(c_norm~=0))];
+                %b = zeros(sum(c_norm~=0), 1);
+                %tmp = quadprog(1E-6*ones(obj.nq+sum(c_norm~=0)),zeros(obj.nq+sum(c_norm~=0), 1), A, b, Aeq, beq);
                 
-                % todo, why is this wrong
+                % for numerical stability:
+                Aeq = Aeq + 1E-6*diag(ones(min(size(Aeq)), 1));
                 
-                tau = tau + H * activeJ.' * contactForces;
+                tmp = Aeq \ beq;
+                vn = tmp(1:obj.plant.getNumPositions);
+                qn = q + vn * obj.plant.timestep;
+            else
+                % no contact forces, so just do standard forward step
+                vd = pinv(H)*tau;
+                vn = v + vd*obj.plant.timestep;
+                qn = q + vn * obj.plant.timestep;
             end
-           vd = pinv(H)*tau;
             
-           v
-           vd
-           v = v + vd * obj.plant.timestep;
-           q = q + v * obj.plant.timestep;
-           
-           xnext(inds) = [q; v];
+            %% MEASUREMENT UPDATE:
+            % calculate SDF over the projected location for the lidar
+            % points, and sum it up, making weight inverse prop to it.
+            kinsol = obj.plant.getManipulator.doKinematics(qn);
+            [dists, ~, ~, ~, body_idx] = obj.plant.getManipulator.signedDistances(kinsol, lidar, false);
+            sigma = 0.001;
+            xnext_pre(i) = sum(exp(-dists(body_idx > 1).^2/sigma));
+            xnext_pre(inds) = [qn; vn];
+        end
+        
+        if (sum(xnext_pre(1:obj.num_particles)) < 1E6)
+            xnext_pre(1:obj.num_particles) = xnext_pre(1:obj.num_particles) / sum(xnext_pre(1:obj.num_particles));
+        else
+            xnext_pre(1:obj.num_particles) = 1 / obj.num_particles;
+        end
+        
+        % Now we need to resample:
+        cumu_probs = cumsum(xnext_pre(1:obj.num_particles));
+        % trying "stratified resampling" from http://people.isy.liu.se/rt/schon/Publications/HolSG2006.pdf
+        cumu_sampling = (rand(obj.num_particles, 1) + (1:obj.num_particles).' - 1)/obj.num_particles;
+        xnext = xnext_pre;
+        for k=1:obj.num_particles
+            ind = find(cumu_probs > cumu_sampling(k), 1);
+            xnext(obj.getParticleStateInds(k)) = xnext_pre(obj.getParticleStateInds(ind));
+            xnext(obj.getParticleContactInds(k)) = xnext_pre(obj.getParticleContactInds(ind));
         end
     end
     
     function y = output(obj,t,x,varargin)
       if (t > 0.01)
+          inputs = obj.getInputFrame.splitCoordinates(varargin{1});
+          lidar = reshape(inputs{2}, 3, length(inputs{2})/3);
+          kinsol = obj.plant.doKinematics(inputs{1});
+          lidar = obj.plant.forwardKin(kinsol, obj.plant.findFrameId('rgbdframe'), lidar);
+          
           clf; hold on;
+          % why oh why is u (varargin) all zeros.
+          % whyyyy
+          scatter(lidar(1, :), lidar(3, :));
+          
           for k = 1:obj.num_particles
             inds = obj.getParticleStateInds(k);
-            obj.v.drawBody(t, x(inds(1:obj.nq)), 1);
+            obj.v.drawBody(t, x(inds(1:obj.nq)), 1, min(x(k)*5, 1.0), [1, 0, 1]);
           end
+          
       end
       
       y = zeros(obj.nx, 1);
       for i=1:obj.num_particles
          y = y + x(i) * x(obj.getParticleStateInds(i)); 
       end
+      x(1:obj.num_particles)
       y;
       
     end

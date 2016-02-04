@@ -44,9 +44,11 @@ classdef PlanarRigidBodyVisualizer < RigidBodyVisualizer
       warning(w);      
     end
     
-    function drawBody(obj, t, x, extra)
+    function drawBody(obj, t, x, extra, alpha, color)
       if nargin == 3
           extra = 0;
+          color = obj.fade_color;
+          alpha = 1;
       end
       
       n = obj.model.num_positions;
@@ -65,7 +67,7 @@ classdef PlanarRigidBodyVisualizer < RigidBodyVisualizer
           y = reshape(pts(2,:),size(obj.body(i).y{j}));
           z = reshape(pts(3,:),size(obj.body(i).z{j}));
           if extra
-            patch(x,y,z,c,'LineWidth',.01,'EdgeColor',obj.fade_percent*obj.fade_color, 'FaceAlpha', 0.1); %0*xpts,'FaceColor','flat','FaceVertexCData',body.geometry.c);
+            patch(x,y,z,c,'LineWidth',.01,'EdgeColor',obj.fade_percent*color, 'FaceAlpha', alpha); %0*xpts,'FaceColor','flat','FaceVertexCData',body.geometry.c);
           else
             patch(x,y,z,c,'LineWidth',.01,'EdgeColor',obj.fade_percent*obj.fade_color); %0*xpts,'FaceColor','flat','FaceVertexCData',body.geometry.c);
           end
