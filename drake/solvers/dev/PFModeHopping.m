@@ -13,6 +13,7 @@ classdef PFModeHopping < DrakeSystem
       nD; % # of friction cone members
       nContactForces;  
       
+      lcmgl;
       
       num_particles;
       
@@ -43,7 +44,7 @@ classdef PFModeHopping < DrakeSystem
       
       %             weights             state, contact state
       num_states = num_particles + num_particles*(nx+nContactForces);
-      obj = obj@DrakeSystem(0,num_states,nu+nz,nx,0,1);
+      obj = obj@DrakeSystem(0,num_states,nu+nz,num_states,0,1);
       obj.num_particles = num_particles;
       
       obj.x0 = x0;
@@ -76,9 +77,12 @@ classdef PFModeHopping < DrakeSystem
       else
           frames = [frames plant_output_frames];
       end
+      
+      checkDependency('lcmgl');
+      obj.lcmgl = drake.util.BotLCMGLClient(lcm.lcm.LCM.getSingleton(), 'PFModeHopping');
 
       obj = setInputFrame(obj,MultiCoordinateFrame.constructFrame(frames));
-      obj = setOutputFrame(obj,getStateFrame(plant));
+      obj = setOutputFrame(obj,getStateFrame(obj));
       obj = setSampleTime(obj,getSampleTime(plant));
     end
     
@@ -124,14 +128,14 @@ classdef PFModeHopping < DrakeSystem
             else
                 tau = -C;
             end
-            tau = tau + randn(size(tau))*10;
+            tau = tau + randn(size(tau))*5;
            
             % assemble J
             if obj.nC > 0
                 [phi,normal,~,~,~,~,~,~,n,D,dn,dD] = obj.plant.contactConstraints(q,false);
                 
                 % Consider updating contact state
-                c_proba = exp(-100*(phi+n*v*obj.plant.timestep))*0.5;
+                c_proba = exp(-100*(phi+n*v*obj.plant.timestep))*0.9;
                 c_norm_active = rand(size(c_proba)) < c_proba;
                 
                 c_active = zeros(obj.nContactForces, 1);
@@ -183,10 +187,13 @@ classdef PFModeHopping < DrakeSystem
             % points, and sum it up, making weight inverse prop to it.
             kinsol = obj.plant.getManipulator.doKinematics(qn);
             [dists, ~, ~, ~, body_idx] = obj.plant.getManipulator.signedDistances(kinsol, lidar, false);
-            sigma = 0.001;
-            xnext_pre(i) = sum(exp(-dists(body_idx > 1).^2/sigma));
+            sigma = 0.1;
+            xnext_pre(i) = sum(exp(-dists(body_idx > 1).^2/sigma^2));
             xnext_pre(inds) = [qn; vn];
+            xnext_pre(obj.getParticleContactInds(i)) = c_active;
         end
+        
+        xnext_pre(1:obj.num_particles)
         
         if (sum(xnext_pre(1:obj.num_particles)) < 1E6)
             xnext_pre(1:obj.num_particles) = xnext_pre(1:obj.num_particles) / sum(xnext_pre(1:obj.num_particles));
@@ -204,6 +211,22 @@ classdef PFModeHopping < DrakeSystem
             xnext(obj.getParticleStateInds(k)) = xnext_pre(obj.getParticleStateInds(ind));
             xnext(obj.getParticleContactInds(k)) = xnext_pre(obj.getParticleContactInds(ind));
         end
+        
+        if ~isa(obj.v, 'PlanarRigidBodyVisualizer')
+            kinsol = obj.plant.doKinematics( inputs{1} );
+            for i = 2:(length(obj.plant.getManipulator.body))
+                bdy = obj.plant.getManipulator.body(i);
+                obj.lcmgl.glColor4f(0, 1, 1, 0.1);
+                posrpy = obj.plant.forwardKin(kinsol, i, bdy.visual_geometry{1}.T(1:3, 4), 1);
+                axis_angle = rpy2axis(posrpy(4:6));
+                obj.lcmgl.glPushMatrix();
+                obj.lcmgl.glTranslated(posrpy(1), posrpy(2), posrpy(3));
+                obj.lcmgl.glRotated(axis_angle(4)*180/pi, axis_angle(1), axis_angle(2), axis_angle(3));
+                obj.lcmgl.box(zeros(3, 1), bdy.visual_geometry{1}.size);
+                obj.lcmgl.glPopMatrix();
+            end
+        end
+
     end
     
     function y = output(obj,t,x,varargin)
@@ -213,24 +236,43 @@ classdef PFModeHopping < DrakeSystem
           kinsol = obj.plant.doKinematics(inputs{1});
           lidar = obj.plant.forwardKin(kinsol, obj.plant.findFrameId('rgbdframe'), lidar);
           
-          clf; hold on;
+          if isa(obj.v, 'PlanarRigidBodyVisualizer')
+            clf; hold on;
+          end
           % why oh why is u (varargin) all zeros.
           % whyyyy
-          scatter(lidar(1, :), lidar(3, :));
+          %scatter(lidar(1, :), lidar(3, :));
           
           for k = 1:obj.num_particles
             inds = obj.getParticleStateInds(k);
-            obj.v.drawBody(t, x(inds(1:obj.nq)), 1, min(x(k)*5, 1.0), [1, 0, 1]);
+            if isa(obj.v, 'PlanarRigidBodyVisualizer')
+                obj.v.drawBody(t, x(inds(1:obj.nq)), 1, min(x(k)*5, 1.0), [1, 0, 1]);
+            else
+                kinsol = obj.plant.doKinematics( x(obj.getParticleStateInds(k)) );
+                for i = 2:(length(obj.plant.getManipulator.body))
+                    bdy = obj.plant.getManipulator.body(i);
+                    obj.lcmgl.glColor4f(1, 0, 1, min(x(k)*1, 1.0));
+                    posrpy = obj.plant.forwardKin(kinsol, i, bdy.visual_geometry{1}.T(1:3, 4), 1);
+                    axis_angle = rpy2axis(posrpy(4:6));
+                    obj.lcmgl.glPushMatrix();
+                    obj.lcmgl.glTranslated(posrpy(1), posrpy(2), posrpy(3));
+                    obj.lcmgl.glRotated(axis_angle(4)*180/pi, axis_angle(1), axis_angle(2), axis_angle(3));
+                    obj.lcmgl.box(zeros(3, 1), bdy.visual_geometry{1}.size);
+                    obj.lcmgl.glPopMatrix();
+                end
+            end
           end
+
+          obj.lcmgl.switchBuffers();
           
       end
       
-      y = zeros(obj.nx, 1);
-      for i=1:obj.num_particles
-         y = y + x(i) * x(obj.getParticleStateInds(i)); 
-      end
-      x(1:obj.num_particles)
-      y;
+      %y = zeros(obj.nx, 1);
+      %for i=1:obj.num_particles
+      %   y = y + x(i) * x(obj.getParticleStateInds(i)); 
+      %end
+      %x(1:obj.num_particles);
+      y = x;
       
     end
   end

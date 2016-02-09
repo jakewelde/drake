@@ -13,6 +13,11 @@
       </geometry>
     </visual>
     <collision>
+      <geometry>
+        <box size="2 .5 1" />
+      </geometry>
+    </collision>
+    <collision>
       <origin xyz="1 .25 .5"/>
       <geometry>
         <sphere radius="0" />

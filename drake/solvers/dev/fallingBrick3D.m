@@ -2,9 +2,9 @@ options.terrain = RigidBodyFlatTerrain();
 options.floating = true;
 options.multiple_contacts = false;
 w = warning('off','Drake:RigidBodyManipulator:UnsupportedContactPoints');
-plant = PlanarRigidBodyManipulator(fullfile(getDrakePath,'systems','plants','test','FallingBrickContactPoints.urdf'),options);
+plant = RigidBodyManipulator(fullfile(getDrakePath,'systems','plants','test','FallingBrick.urdf'),options);
 warning(w);
-x0 = [0;1;0; 0; 0; 0.2];
+x0 = [0;0;1; 0;0;0; 0;0;0; 0;0;0.2];
 
 dt = 0.00333;
 tf = 2;
@@ -13,13 +13,14 @@ w = warning('off','Drake:TimeSteppingRigidBodyManipulator:ResolvingLCP');
 
 % Instrument it
 pitch = 0.5;
-yaw = 0.0;
-rows = 100;
-cols = 1;
+yaw = 0.5;
+rows = 50;
+cols = 50;
 scanOffset = [3;0;0.25;0;0;pi];
 rgbd_frame = RigidBodyFrame(1,scanOffset(1:3),scanOffset(4:6),'rgbdframe');
 plant_ts = plant_ts.addFrame(rgbd_frame);
 rgbd_sensor = RigidBodyDepthSensor('rgbd', plant_ts.findFrameId('rgbdframe'), -pitch, pitch, rows, -yaw, yaw, cols, 10.0);
+rgbd_sensor = rgbd_sensor.enableLCMGL();
 plant_ts = plant_ts.addSensor(FullStateFeedbackSensor());
 plant_ts = plant_ts.addSensor(rgbd_sensor);
 plant_ts = plant_ts.compile();
@@ -48,39 +49,4 @@ for i=1:sys.getOutputFrame.getNumFrames
 end
 sys = mimoCascade(sys, v, cons, [], outs);
 'starting sim'
-ytraj = simulate(sys,[0 1.5],[x0; PF.getInitialState()]);
-
-keyboard
-
-%% Plot things
-data = ytraj.xx;
-probs_per_mode = zeros(size(data, 2), PF.nContactForces);
-states_x = zeros(size(data, 2), PF.num_particles);
-states_x_gt = zeros(size(data, 2), 1);
-for i=1:size(data, 2)
-    separated = sys.getOutputFrame.splitCoordinates(data(:, i));
-    states_x_gt(i, 1) = separated{1}(2);
-    stateest = separated{3};
-    for k=1:PF.num_particles
-        probs_per_mode(i, :) = probs_per_mode(i, :) + stateest(k)*stateest(PF.getParticleContactInds(k)).';
-        states_x_this = stateest(PF.getParticleStateInds(k));
-        states_x(i, k) = states_x_this(2);
-    end
-end
-%%
-figure;
-hold all;
-plot(ytraj.tt, states_x);
-for i=1:PF.num_particles
-    plot(ytraj.tt, states_x(:, i));
-end
-xlabel('t')
-ylabel('height of box (z)')
-%%
-figure;
-hold all;
-for i=1:PF.nContactForces
-    plot(ytraj.tt, probs_per_mode(:, i))
-end
-xlabel('t')
-ylabel('probability of contact mode (color-coded)')
+ytraj = simulate(sys,[0 2],[x0; PF.getInitialState()]);

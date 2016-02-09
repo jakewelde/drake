@@ -1,0 +1,9 @@
+package drake;
+
+struct lcmt_point_cloud
+{
+  int64_t timestamp;
+
+  int32_t num_points;
+  float points[num_points][3];
+}
