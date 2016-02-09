@@ -5,7 +5,7 @@
 add_library_with_exports(LIB_NAME drakeRBM SOURCE_FILES RigidBodyTree.cpp RigidBody.cpp RigidBodyTreeURDF.cpp RigidBodyTreeContact.cpp)
 target_link_libraries(drakeRBM drakeCollision drakeJoints spruce drakeUtil tinyxml2)
 pods_install_libraries(drakeRBM)
-drake_install_headers(RigidBodyTree.h RigidBody.h RigidBodyFrame.h KinematicPath.h KinematicsCache.h ForceTorqueMeasurement.h)
+drake_install_headers(RigidBodyTree.h RigidBody.h RigidBodyFrame.h KinematicPath.h KinematicsCache.h ForceTorqueMeasurement.h BotVisualizer.h)
 pods_install_pkg_config_file(drake-rbm
   LIBS -ldrakeRBM -ldrakeCollision -ldrakeJoints -lspruce -ldrakeUtil
   REQUIRES
@@ -138,6 +138,7 @@ if (LCM_FOUND)
   target_link_libraries(drakeRBSystem drakeRBM drakeLCMSystem drakeOptimization drakeRigidBodyConstraint)
 
   pods_install_libraries(drakeRBSystem)
+  drake_install_headers(RigidBodySystem.h urdfParsingUtil.h)
 
   add_executable(urdfLCMNode urdfLCMNode.cpp)
   target_link_libraries(urdfLCMNode drakeRBSystem)

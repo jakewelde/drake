@@ -13,6 +13,8 @@ if (LCM_FOUND)
 
   include_directories(${PROJECT_SOURCE_DIR}/pod-build/lcmgen)
   include_directories(${PROJECT_SOURCE_DIR}/../build/include/lcmtypes)
+  include_directories(${PROJECT_SOURCE_DIR}/../../build/include/lcmtypes)
+  include_directories(${PROJECT_SOURCE_DIR}/../../../build/include/lcmtypes)
   add_executable(irb140StateEstimator irb140_state_estimator.cpp)
   target_link_libraries(irb140StateEstimator drakeIRB140EstimatorSystem drakeRBSystem drakeLCMSystem)
 

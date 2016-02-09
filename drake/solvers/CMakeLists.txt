@@ -43,6 +43,7 @@ set_target_properties(drakeOptimization PROPERTIES COMPILE_FLAGS -fPIC)
 if (snopt_c_FOUND)
   pods_use_pkg_config_packages(drakeOptimization snopt_c)
 endif(snopt_c_FOUND)
+pods_install_libraries(drakeOptimization)  
 
 if(snopt_c_FOUND AND MATLAB_FOUND)
   add_mex(NonlinearProgramSnoptmex NonlinearProgramSnoptmex.cpp)
@@ -52,3 +53,5 @@ endif()
 
 add_subdirectory(qpSpline)
 add_subdirectory(test)
+
+drake_install_headers(Optimization.h)
