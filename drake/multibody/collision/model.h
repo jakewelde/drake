@@ -209,6 +209,8 @@ class Model {
    * \param use_margins flag indicating whether or not to use the version
    * of this model with collision margins
    * \param[out] distance to the first collision, or -1 on no collision
+   * \param[out] normal to the first collision, or -1 if no collision
+   * \param[out] collision_body of the other collision
    * \return true if this method ran successfully
    */
   virtual bool collisionRaycast(
@@ -218,7 +220,8 @@ class Model {
       // TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).
       Eigen::VectorXd& distances,
       // TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).
-      Eigen::Matrix3Xd& normals) = 0;
+      Eigen::Matrix3Xd& normals,
+      std::vector<ElementId>& collision_body) = 0;
 
   /**
    * Modifies a collision element's local transform to be relative to a joint's
