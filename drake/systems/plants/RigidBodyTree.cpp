@@ -320,8 +320,9 @@ bool RigidBodyTree::collisionRaycast(const KinematicsCache<double>& cache,
                                      bool use_margins )
 {
   Matrix3Xd normals;
+  std::vector<DrakeCollision::ElementId> collision_body;
   updateDynamicCollisionElements(cache);
-  return collision_model->collisionRaycast(origins, ray_endpoints, use_margins, distances, normals);
+  return collision_model->collisionRaycast(origins, ray_endpoints, use_margins, distances, normals, collision_body);
 }
 
 bool RigidBodyTree::collisionRaycast(const KinematicsCache<double>& cache,
@@ -331,8 +332,32 @@ bool RigidBodyTree::collisionRaycast(const KinematicsCache<double>& cache,
                                      Matrix3Xd &normals,
                                      bool use_margins )
 {
+  std::vector<DrakeCollision::ElementId> collision_body;
   updateDynamicCollisionElements(cache);
-  return collision_model->collisionRaycast(origins, ray_endpoints, use_margins, distances, normals);
+  return collision_model->collisionRaycast(origins, ray_endpoints, use_margins, distances, normals, collision_body);
+}
+
+bool RigidBodyTree::collisionRaycast(const KinematicsCache<double>& cache,
+                                     const Matrix3Xd &origins,
+                                     const Matrix3Xd &ray_endpoints,
+                                     VectorXd &distances,
+                                     Matrix3Xd &normals,
+                                     std::vector<int>& body_idx,
+                                     bool use_margins )
+{
+  updateDynamicCollisionElements(cache);
+  std::vector<DrakeCollision::ElementId> collision_body;
+  bool ret = collision_model->collisionRaycast(origins, ray_endpoints, use_margins, distances, normals, collision_body);
+  body_idx.resize(collision_body.size());
+  for (int i = 0; i < collision_body.size(); i++){
+    if (collision_body[i] == -1){
+      body_idx[i] = -1;
+    } else {
+      const RigidBody::CollisionElement* element = dynamic_cast<const RigidBody::CollisionElement*>(collision_model->readElement(collision_body[i]));
+      body_idx[i] = element->getBody()->body_index;
+    }
+  }
+  return ret;
 }
 
 bool RigidBodyTree::collisionDetect(const KinematicsCache<double>& cache,

@@ -359,6 +359,7 @@ public:
 
   bool collisionRaycast(const KinematicsCache<double>& cache, const Eigen::Matrix3Xd &origins, const Eigen::Matrix3Xd &ray_endpoints, Eigen::VectorXd &distances, bool use_margins=false);
   bool collisionRaycast(const KinematicsCache<double>& cache, const Eigen::Matrix3Xd &origins, const Eigen::Matrix3Xd &ray_endpoints, Eigen::VectorXd &distances, Eigen::Matrix3Xd &normals, bool use_margins=false);
+  bool collisionRaycast(const KinematicsCache<double>& cache, const Eigen::Matrix3Xd &origins, const Eigen::Matrix3Xd &ray_endpoints, Eigen::VectorXd &distances, Eigen::Matrix3Xd &normals, std::vector<int>& collision_body, bool use_margins=false);
 
   void signedDistances(const KinematicsCache<double>& cache,
                        const Eigen::Matrix3Xd& points,
