@@ -586,54 +586,58 @@ void BulletModel::collisionDetectFromPoints(
     }
   }
 }
-
-bool BulletModel::collisionRaycast(const Matrix3Xd& origins,
-                                   const Matrix3Xd& ray_endpoints,
-                                   bool use_margins, VectorXd& distances,
-                                   Matrix3Xd& normals) {
-  distances.resize(ray_endpoints.cols());
-  normals.resize(3, ray_endpoints.cols());
+  
+bool BulletModel::collisionRaycast(const Matrix3Xd &origins, 
+                                   const Matrix3Xd &ray_endpoints, 
+                                   bool use_margins, VectorXd &distances, 
+                                   Matrix3Xd &normals,
+                                   std::vector<ElementId>& collision_body)
+{
+  
+  distances.resize(origins.cols());
+  normals.resize(3, origins.cols());
+  collision_body.resize(origins.cols());
 
   BulletCollisionWorldWrapper& bt_world = getBulletWorld(use_margins);
+  
+  for (int i = 0; i < origins.cols(); i ++)
+  {
+  
+      btVector3 ray_from_world(origins(0,i), origins(1,i), origins(2,i));
+      btVector3 ray_to_world(ray_endpoints(0,i), ray_endpoints(1,i), ray_endpoints(2,i));
+      
+      btCollisionWorld::ClosestRayResultCallback ray_callback(ray_from_world, ray_to_world);
+      
+      bt_world.bt_collision_world->rayTest(ray_from_world, ray_to_world, ray_callback);
+      
+      if (ray_callback.hasHit()) {
+          
+          // compute distance to hit
+          
+          btVector3 end = ray_callback.m_hitPointWorld;
+          
+          Vector3d end_eigen(end.getX(), end.getY(), end.getZ());
+          
+          distances(i) = (end_eigen - origins.col(i)).norm();
+        
+          btVector3 normal = ray_callback.m_hitNormalWorld;
+          normals(0, i) = normal.getX();
+          normals(1, i) = normal.getY();
+          normals(2, i) = normal.getZ();      
 
-  for (int i = 0; i < ray_endpoints.cols(); i++) {
-    int origin_col = (origins.cols() > 1 ? i : 0);  // if a single origin is
-                                                    // passed in, then use it
-                                                    // for all raycasts
-    btVector3 ray_from_world(origins(0, origin_col), origins(1, origin_col),
-                             origins(2, origin_col));
-    btVector3 ray_to_world(ray_endpoints(0, i), ray_endpoints(1, i),
-                           ray_endpoints(2, i));
-
-    btCollisionWorld::ClosestRayResultCallback ray_callback(ray_from_world,
-                                                            ray_to_world);
-
-    bt_world.bt_collision_world->rayTest(ray_from_world, ray_to_world,
-                                         ray_callback);
-
-    if (ray_callback.hasHit()) {
-      // compute distance to hit
-
-      btVector3 end = ray_callback.m_hitPointWorld;
-
-      Vector3d end_eigen(end.getX(), end.getY(), end.getZ());
-
-      distances(i) = (end_eigen - origins.col(origin_col)).norm();
-
-      btVector3 normal = ray_callback.m_hitNormalWorld;
-      normals(0, i) = normal.getX();
-      normals(1, i) = normal.getY();
-      normals(2, i) = normal.getZ();
-    } else {
-      distances(i) = -1.;
-      normals(0, i) = 0.;
-      normals(1, i) = 0.;
-      normals(2, i) = 0.;
-    }
+          auto element = static_cast< Element*>(ray_callback.m_collisionObject->getUserPointer());
+          collision_body[i] = element->getId();
+      } else {
+          distances(i) = -1.;
+          normals(0, i) = 0.;
+          normals(1, i) = 0.;
+          normals(2, i) = 0.;
+          collision_body[i] = -1;
+      }
   }
-
+  
   return true;
-}
+} 
 
 bool BulletModel::closestPointsAllToAll(const vector<ElementId>& ids_to_check,
                                         const bool use_margins,
@@ -665,8 +669,7 @@ bool BulletModel::closestPointsPairwise(const vector<ElementIdPair>& id_pairs,
   for (auto id_pair_iter = id_pairs.begin(); id_pair_iter != id_pairs.end();
        ++id_pair_iter) {
     findClosestPointsBtwElements(id_pair_iter->first, id_pair_iter->second,
-                                 use_margins, c);
-  }
+                                 use_margins, c);}
 
   closest_points = c->getResults();
   return closest_points.size() > 0;

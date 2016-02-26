@@ -77,7 +77,8 @@ class BulletModel : public Model {
   virtual bool collisionRaycast(const Eigen::Matrix3Xd& origins,
                                 const Eigen::Matrix3Xd& ray_endpoints,
                                 bool use_margins, Eigen::VectorXd& distances,
-                                Eigen::Matrix3Xd& normals);
+                                Eigen::Matrix3Xd& normals,
+                                std::vector<ElementId>& collision_body);
 
   /** \brief Compute the set of potential collision points for all
    * eligible pairs of collision geometries in this model. This includes
