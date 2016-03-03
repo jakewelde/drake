@@ -362,6 +362,7 @@ void RigidBodyTree::collisionDetectFromPoints(
   body_x.resize(3, closest_points.size());
   normal.resize(3, closest_points.size());
   phi.resize(closest_points.size());
+  body_idx.resize(closest_points.size());
 
   Vector3d ptA, ptB, n;
   double distance;
@@ -371,10 +372,8 @@ void RigidBodyTree::collisionDetectFromPoints(
     body_x.col(i) = ptA;
     normal.col(i) = n;
     phi[i] = distance;
-    const RigidBody::CollisionElement* elementB =
-        dynamic_cast<const RigidBody::CollisionElement*>(
-            collision_model->readElement(closest_points[i].getIdB()));
-    body_idx.push_back(elementB->getBody()->body_index);
+    const RigidBody::CollisionElement* elementB = dynamic_cast<const RigidBody::CollisionElement*>(collision_model->readElement(closest_points[i].getIdB()));
+    body_idx[i] = elementB->getBody()->body_index;
   }
 }
 
