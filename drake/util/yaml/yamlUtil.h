@@ -29,3 +29,5 @@ drake::eigen_aligned_std_map<std::string, QPControllerParams> loadAllParamSets(
 RobotPropertyCache parseKinematicTreeMetadata(
     const YAML::Node& metadata, const RigidBodyTree<double>& robot);
 KinematicModifications parseKinematicModifications(const YAML::Node& mods);
+JointNames parseRobotJointNames(const YAML::Node& joint_names,
+                                const RigidBodyTree& tree);
