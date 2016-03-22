@@ -280,7 +280,7 @@ void RigidBodyTree<T>::compile(void) {
     getTerrainContactPoints(body, &contact_points);
     body.set_contact_points(contact_points);
   }
-
+  
   CreateCollisionCliques();
 
   initialized_ = true;
