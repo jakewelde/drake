@@ -171,6 +171,13 @@ void RigidBodyTree::compile(void) {
     getTerrainContactPoints(body, body.contact_pts);
   }
 
+  robot_name.resize(0);
+  for (auto it = bodies.begin(); it != bodies.end(); ++it) {
+    RigidBody& body = **it;
+    if (std::find(robot_name.begin(), robot_name.end(), body.model_name) == robot_name.end())
+      robot_name.push_back(body.model_name);
+  }
+
   initialized = true;
 }
 
