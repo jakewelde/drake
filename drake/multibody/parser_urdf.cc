@@ -1042,7 +1042,44 @@ ModelInstanceIdTable ParseModel(RigidBodyTree<double>* tree, XMLElement* node,
   //}
   // END_DEBUG
 
-  // todo: parse collision filter groups
+  // Parses the collision filter groups.
+  vector<string> group_names;
+  vector<vector<string>> group_members, group_ignores;
+  for (XMLElement* collision_filter_group_node =
+          node->FirstChildElement("collision_filter_group");
+       collision_filter_group_node;
+       collision_filter_group_node =
+          collision_filter_group_node->NextSiblingElement(
+            "collision_filter_group")) {
+    parseCollisionFilterGroup(model,
+                              collision_filter_group_node,
+                              group_names,
+                              group_members,
+                              group_ignores);
+  }
+
+  // Applies collision filter groups.
+  DrakeCollision::bitmask belongs_to, ignores;
+  vector<string>::iterator ignored_group;
+  for (int group = 0; group < group_names.size(); group++)
+  {
+    belongs_to = DrakeCollision::NONE_MASK;
+    ignores = DrakeCollision::NONE_MASK;
+    belongs_to.set(group + 1);
+    for (auto ignored : group_ignores[group])
+    {
+    ignored_group = find(group_names.begin(), group_names.end(), ignored);
+      if (ignored_group != group_names.end())
+      {
+        ignores.set(ignored_group - group_names.begin() + 1);
+      }
+    }
+    for (auto link : group_members[group])
+    {
+      model->findLink(link)->addToCollisionFilterGroup(belongs_to);
+      model->findLink(link)->ignoreCollisionFilterGroup(ignores);
+    }
+  }
 
   // Parses the model's joint elements.
   for (XMLElement* joint_node = node->FirstChildElement("joint"); joint_node;
