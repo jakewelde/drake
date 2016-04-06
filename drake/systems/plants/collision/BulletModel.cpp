@@ -580,7 +580,7 @@ void BulletModel::collisionDetectFromPoints(
         got_one = true;
         closest_points[i] =
             PointPair(bt_objB_iter->first, bt_objB_iter->first,
-                      toVector3d(pointOnElemB), toVector3d(pointOnBinWorld),
+                      elements[bt_objB_iter->first]->getLocalTransform()*toVector3d(pointOnElemB), toVector3d(pointOnBinWorld),
                       toVector3d(gjkOutput.m_normalOnBInWorld), distance);
       }
     }
