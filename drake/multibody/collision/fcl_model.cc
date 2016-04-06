@@ -49,7 +49,8 @@ void FCLModel::ClearCachedResults(bool use_margins) {
 bool FCLModel::collisionRaycast(const Eigen::Matrix3Xd& origins,
                                 const Eigen::Matrix3Xd& ray_endpoints,
                                 bool use_margins, Eigen::VectorXd& distances,
-                                Eigen::Matrix3Xd& normals) {
+                                Eigen::Matrix3Xd& normals,
+                                std::vector<ElementId>& collision_body) {
   DRAKE_ABORT_MSG("Not implemented.");
   return false;
 }

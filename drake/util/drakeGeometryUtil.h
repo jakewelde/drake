@@ -20,7 +20,6 @@
 #include "drake/math/quaternion.h"
 #include "drake/math/rotation_conversion_gradient.h"
 #include "drake/math/roll_pitch_yaw.h"
-#include "drake/util/drakeGradientUtil.h"
 
 DRAKE_DEPRECATED("Use drake::kHomogeneousTransformSize instead.")
 const int HOMOGENEOUS_TRANSFORM_SIZE = 16;

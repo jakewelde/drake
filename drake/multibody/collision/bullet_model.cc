@@ -733,11 +733,10 @@ void BulletModel::collisionDetectFromPoints(
         btGjkEpaPenetrationDepthSolver epa;
         btVoronoiSimplexSolver sGjkSimplexSolver;
         sGjkSimplexSolver.setEqualVertexThreshold(0.f);
-        btGjkPairDetector
-            convexConvex(&shapeA, shapeB, &sGjkSimplexSolver, &epa);
+        btGjkPairDetector convexConvex(&shapeA, shapeB, &sGjkSimplexSolver, &epa);
 
         input.m_transformA =
-            btTransform(btQuaternion(0, 0, 0, 1),
+            btTransform(btQuaternion(1, 0, 0, 0),
                         btVector3(points(0, i), points(1, i), points(2, i)));
         input.m_transformB = bt_objB->getWorldTransform();
 
@@ -753,11 +752,13 @@ void BulletModel::collisionDetectFromPoints(
           btVector3 pointOnElemB = input.m_transformB.invXform(pointOnBinWorld);
           phi[i] = distance;
           got_one = true;
-          Element *collision_element =
-              static_cast<Element *>(bt_objB->getUserPointer());
+          Element* collision_element =
+              static_cast<Element*>(bt_objB->getUserPointer());
           closest_points[i] =
               PointPair(collision_element, collision_element,
-                        toVector3d(pointOnElemB), toVector3d(pointOnBinWorld),
+                        elements[bt_objB_iter->first]->getLocalTransform()*
+                           toVector3d(pointOnElemB),
+                        toVector3d(pointOnBinWorld),
                         toVector3d(gjkOutput.m_normalOnBInWorld), distance);
         }
       }
