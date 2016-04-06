@@ -295,7 +295,7 @@ void RigidBodyTree<T>::CreateCollisionCliques() {
       clique_id = get_next_clique_id();
     }
   }
-
+  
   // 2) For collision elements in different bodies
   // This is an O(N^2) loop -- but only happens at initialization.
   //
