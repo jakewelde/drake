@@ -365,6 +365,7 @@ void RigidBodyTree::collisionDetectFromPoints(
 
   collision_model->collisionDetectFromPoints(points, use_margins,
                                              closest_points);
+
   x.resize(3, closest_points.size());
   body_x.resize(3, closest_points.size());
   normal.resize(3, closest_points.size());
@@ -380,7 +381,10 @@ void RigidBodyTree::collisionDetectFromPoints(
     normal.col(i) = n;
     phi[i] = distance;
     const RigidBody::CollisionElement* elementB = dynamic_cast<const RigidBody::CollisionElement*>(collision_model->readElement(closest_points[i].getIdB()));
-    body_idx[i] = elementB->getBody()->body_index;
+    if (elementB)
+      body_idx[i] = elementB->getBody()->body_index;
+    else 
+      body_idx[i] = -1;
   }
 }
 
