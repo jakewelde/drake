@@ -1,63 +1,64 @@
 function runGSSim
 
-close all
-
-% Make a standard rectangular GS sensor, xyz-centered on the origin
-w=200;
-width=1.0;
-gs_thickness = 0.05;
-row = width * ( floor(-w/2)+1:floor(w/2) ) / w; % a row [-w, ..., w]
-grid = cat(1,repmat(row,1,w),kron(row,ones(1,w))); % a 2-by-w*w mat, row x row:
- % [[-w, ..., w,   -w, ..., w,  .......  , -w, ..., w]
- %  [-w, ...,-w, -w+1,...,-w+1, .......  ,  w, ..., w]]
-gs_manifold_x = cat(1,grid,zeros(1,w*w)); % 3-by-w*w, col-vecs of positions
-gs_manifold_n = repmat([0;0;gs_thickness], 1, w*w); % 3-by-w*w, col-vecs of norms
-
 % Make a world to collide against
 r = GSSimpleBox();
 % v = r.constructVisualizer();
-kinsol = doKinematics(r, zeros(6,1));
+x0 = Point(getStateFrame(r));
 use_margins = false;
 
-%(FOR NOW) Move sensor down, then rotate it & normals about x-axis by tau/8
-dy = -10; theta = pi/4;
-R = eye(3);
-%R = [1,0,0;0,cos(theta),-sin(theta);0,sin(theta),cos(theta)]'*R; %x-rot
-R = [cos(theta),-sin(theta),0;sin(theta),cos(theta),0;0,0,1]'*R; %z-rot
-R = [cos(theta),0,sin(theta);0,1,0;-sin(theta),0,cos(theta)]'*R; % y-rot
-approach_vec_unrot = [0;0;dy];
-approach_vec = R*approach_vec_unrot;
+% Move sensor down
+dy = -10;
+approach_vec = [0;0;dy];
 
-gs_manifold_x = gs_manifold_x + repmat(approach_vec_unrot, 1, w*w);
-gs_manifold_x = R*gs_manifold_x;
-gs_manifold_n = R*gs_manifold_n;
+% Important globals
+steps = 100;
+gs_pixelw = 200;
+gs_width = 1.0;
+gs_thickness = 0.05;
 
-%(FOR NOW) Snap the sensor to the collision hull
-gs_manifold_x_unslided = gs_manifold_x;
-slide_amount = collisionApproachGelSight(r, kinsol, gs_manifold_x_unslided, -approach_vec*2, use_margins);
-steps = 50;
+% Set up fast canvas
+figure('doublebuffer','on');
+colormap('Gray');
+set(gca,'drawmode','fast');
+set(gca,'units','pixels');
+set(gca,'xlim',[0 gs_pixelw]);
+set(gca,'ylim',[0 gs_pixelw]);
+axis off;
+imh = image('cdata', zeros(gs_pixelw, gs_pixelw));
+set(imh,'erasemode','none');
 
+xi = x0;
 for i=1:steps
-    slide_vector = (-approach_vec) * (slide_amount-gs_thickness+(i*gs_thickness/steps)) / norm(approach_vec);
-    gs_manifold_x = gs_manifold_x_unslided + repmat(slide_vector, 1, w*w); %.9945
+
+    [gs_manifold_x, gs_manifold_n]=makeGSSquare(gs_pixelw, gs_width, gs_thickness);
+
+    gs_manifold_x = gs_manifold_x + repmat(approach_vec, 1, size(gs_manifold_x,2));
+
+    % Position the box properly
+    xi.base_roll = xi.base_roll + .1;
+    xi.base_pitch = xi.base_pitch + .05;
+    kinsol = r.doKinematics(double(xi));
+    
+    %(FOR NOW) Snap the sensor to the collision hull
+    gs_manifold_x_unslided = gs_manifold_x;
+    slide_amount = collisionApproachGelSight(r, kinsol, gs_manifold_x_unslided, -approach_vec*2, use_margins);
+    
+    slide_vector = (-approach_vec) * (slide_amount) / norm(approach_vec);
+    gs_manifold_x = gs_manifold_x_unslided + repmat(slide_vector, 1, size(gs_manifold_x,2)); %.9945
 
     % Collide! Make image from the rectangular GelSight sensor
     distances = collisionGelSight(r, kinsol, gs_manifold_x, gs_manifold_n, use_margins);
     distances = gs_thickness - distances;
 
     % Reshape result and render image
-    %%% TODO distances = (distances - min(distances)) / (max(distances) - min(distances));
     distances = distances / gs_thickness;
-    distances = reshape(distances,[w,w]);
-    image(repmat(distances,1,1,3));
+    distances = reshape(distances,[gs_pixelw, gs_pixelw]);
+    distances = uint8(distances * 255);
+    % image(repmat(distances,1,1,3));
+    set(imh,'cdata',distances);
     drawnow;
-    hold on;
 end
 
-    function new_point=snap_point(rbm, kinsol, old_point)
-        % old_point should be 3-by-1 point in global frame
-        phi,n,x,body_x,body_idx = collisionDetectFromPoints(rbm,kinsol,old_point,false);
-        new_point = x;
-    end
+close all
 
 end
