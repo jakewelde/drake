@@ -8,13 +8,13 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size=".86 .9 2.0"/>
+        <box size=".80 .96 2.0"/>
       </geometry>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size=".88 .9 2.0"/>
+        <box size=".80 .96 2.0"/>
       </geometry>
     </collision>
   </link>
