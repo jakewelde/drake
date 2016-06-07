@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<robot name="legobrickend">
+<robot name="justasphere">
   <link name="base_link">
     <inertial>
       <mass value="0.5"/>
@@ -8,13 +8,13 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size=".80 .96 2.0"/>
+        <sphere radius="0.05"/>
       </geometry>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size=".80 .96 2.0"/>
+        <sphere radius="0.05"/>
       </geometry>
     </collision>
   </link>
