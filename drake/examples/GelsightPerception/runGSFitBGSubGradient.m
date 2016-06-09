@@ -1,27 +1,42 @@
-function [filter, bg] = runGSFitBGSub()
-% runGSFitBGSub uses the provided depthmaps and corresponding rgb images
-% to train a linear convolution filter to map from one to the other.
+function [filter, bg] = runGSFitBGSubGradient()
+% runGSFitBGSubGradient uses depthmaps and corresponding rgb
+% images to train a linear convolution filter to map from heightmap to
+% GelSight image.
 %
 % The linear model is as follows:
 %
-%   r/g/b_pixel = r/g/b_filter_2D' * depth_pixels
+%   red_pixel = red_row_filter' * grad_row_pixels + ...
+%                   red_col_filter' * grad_col_pixels;
 %
-% Where depth_pixels is a patch of pixels from the source image and
-% there are separate filters for r, g, and b.
+% Where grad_row/col_pixels are a patch of row-/column-wise gradients
+% derived from a depth image. There are corresponding, independent models
+% for green and blue. By using raw gradients instead of the original depth
+% map, we add some smoothness under different scalings of the filter (ie.
+% one can first use the proper gradient operator on a high-res image, THEN
+% apply the scaled filter to said image, rather than scaling both the
+% gradient operator and the filter as a depth filter would require).
 %
-% @retval filter the flipped 2D filter image, with separate color channels
-% for r,g, and b stored in its third dimension. Can be applied to a depth
-% image to produce one color=1/2/3 of an rgb image by means of the MATLAB
-% command conv2, eg:
+% @retval filter the flipped 2D filter image, m-by-n-by-3-by-2, with
+% separate color channels for r,g, and b stored in its third dimension and
+% separate directional gradient channels (1=row, 2=col) stored in its
+% fourth dimension. Can be applied to a depth image to produce one
+% color=1/2/3 of an rgb image by means of the MATLAB command conv2, eg:
 %
-%    gs_image(:,:,color) = conv2(depth_image, filter(:,:,color), 'same');
+%    grad_row_image(:,:,color)=conv2(depth_image(:,:,color),[1,-1]','same');
+%    grad_col_image(:,:,color)=conv2(depth_image(:,:,color),[1,-1],'same');
+%    gs_image(:,:,color) = ...
+%      conv2(grad_row_image(:,:,color), filter(:,:,color,1), 'same') + ...
+%      conv2(grad_col_image, filter(:,:,color,2), 'same');
 %
 % @retval bg the background that was subtracted from the images. Helpful
 % for visualizing the derived GelSight image from a depth map, also shows
-% what size of image the filter is meant to be applied to.
+% what size of image the filter was derived from.
 
+if nargin < length({'desired_img_width'})
+   desired_img_width = 1280; 
+end
 
-
+refs_list = dir('reference');
 
 % cleanrgbfolder = 'cleanrgb';
 % cleandepthfolder = 'cleandepth';
@@ -52,18 +67,19 @@ assert(sum(sum(kernel_2D==0 | kernel_2D==1)) == numel(kernel_2D));
 
 As = {};
 bs = {};
-ref_imgs = {};
-depth_imgs = {};
+ref_imgs = cell(length(good_image_indices),1);
+depth_imgs = cell(length(good_image_indices),1);
 
 background_2D = imread([cleanrgbfolder, '/ref',int2str(background_image_index),'.png']);
 background_2D = imresize(background_2D,scaling);
 background_2D = double(background_2D)/255;
     
 for image_index=good_image_indices
-    % allocate the regression matrix A
+    % Allocate the regression matrix A
     A = zeros(num_samps * length(good_image_indices),numel(kernel_2D),3);
     b = zeros(num_samps * length(good_image_indices),3);
     
+    % Load in training images; heightmap + GelSight image
     ref_img_2D = imread([cleanrgbfolder, '/ref',int2str(image_index),'.png']);
     ref_img_2D = imresize(ref_img_2D,scaling);
     ref_img_2D = double(ref_img_2D)/255;
@@ -71,11 +87,17 @@ for image_index=good_image_indices
     depth_img_2D = imresize(depth_img_2D,scaling);
     depth_img_2D = double(depth_img_2D)/255;
     
+    % Pre-processing; perform bg sub on GelSight image and
+    % convert heightmap to r- and c- gradient maps.
     ref_img_2D = ref_img_2D - background_2D;
-    
-%     for color=1:3
-%         ref_img_2D(:,:,color) = conv2(ref_img_2D(:,:,color), [0,1,0;1,0,-1;0,-1,0], 'same');
-%     end
+    gradr_img_2D = zeros(size(depth_img_2D));
+    for color=1:3
+        gradr_img_2D(:,:,color) = conv2(depth_img_2D(:,:,color),[1,-1]','same');
+    end
+    gradc_img_2D = zeros(size(depth_img_2D));
+    for color=1:3
+        gradc_img_2D(:,:,color) = conv2(depth_img_2D(:,:,color),[1,-1],'same');
+    end
     
     disp(size(ref_img_2D))
     disp(size(depth_img_2D))
@@ -85,37 +107,30 @@ for image_index=good_image_indices
     rows = size(ref_img_2D,1);
     cols = size(ref_img_2D,2);
     
-    %Make 1D version of images
+    %Make 1D version of images and store them for later
     ref_img = reshape(ref_img_2D, [rows*cols, 3]);
     depth_img = reshape(depth_img_2D, [rows*cols, 3]);
     
     ref_imgs{image_index} = ref_img;
     depth_imgs{image_index} = depth_img;
     
-    %Make kernel vector corresponding to starting kernel off in top-left
-    % of image.
+    %Make linear kernel vector corresponding to starting kernel off in
+    % top-left of image.
     krows = size(kernel_2D, 1);
     kcols = size(kernel_2D, 2);
     khfrows = floor(krows/2) + 1;
     khfcols = floor(kcols/2) + 1;
-    
-%     rows = 6;
-%     cols = 3;
-%     ref_img = zeros(rows*cols, 3);
-%     depth_img = zeros(rows*cols, 3);
-    
-    kernel_lin = zeros(krows*cols,1);
+    kernel_lin = zeros(size(ref_img, 1),1); %zeros(krows*cols,1);
     for kcol=1:kcols
         kernel_lin(((kcol-1)*rows+ 1) : (kcol*rows)) = vertcat(kernel_2D(kcols,:)',zeros(rows-krows,1));
     end
-    kernel_lin = vertcat(kernel_lin, zeros(size(ref_img, 1) - size(kernel_lin, 1),1));
     
-    disp(size(kernel_lin));
-    
+    disp(size(kernel_lin)); % DEBUG
     disp(size(ref_img));
     disp(size(depth_img));
     
-    %Randomly sample num_samps points from the image
+    %Randomly sample num_samps points from the image to build regression
+    % matrix (will learn filter via least squares)
     sampd = zeros(num_samps,2);
     for i=1:num_samps
         roff = floor(rand()*(1+rows-krows));
@@ -133,9 +148,6 @@ for image_index=good_image_indices
         A(i,:,:) = in;
         b(i,:) = out;
         
-        %figure;
-        %imshow(reshape(in, krows, kcols, 3));
-                
         sampd(i,:)=[r c];
     end
     disp(numel(in));
@@ -209,7 +221,6 @@ for image_index=good_image_indices
 
         recon_2D = cat(3, recon_2D, recon_color);
     end
-    % recon_2D = recon_2D(krows:krows+rows-1, kcols:kcols+cols-1, :);
 
     %recon_2D = (recon_2D - min(min(min(recon_2D)))) / (max(max(max(recon_2D))) - min(min(min(recon_2D))));
     recon_2D = max(recon_2D, 0*recon_2D);
