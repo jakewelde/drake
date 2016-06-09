@@ -73,10 +73,12 @@ depth_imgs = cell(length(good_image_indices),1);
 background_2D = imread([cleanrgbfolder, '/ref',int2str(background_image_index),'.png']);
 background_2D = imresize(background_2D,scaling);
 background_2D = double(background_2D)/255;
-    
+
+% blur_filter = normpdf(floor(real(log(kron(exp(abs([-40:40])),exp(abs([-40:40]'))))) + .5),0,10);
+
 for image_index=good_image_indices
     % Allocate the regression matrix A
-    A = zeros(num_samps * length(good_image_indices),numel(kernel_2D),3);
+    A = zeros(num_samps * length(good_image_indices),numel(kernel_2D) * 2,3);
     b = zeros(num_samps * length(good_image_indices),3);
     
     % Load in training images; heightmap + GelSight image
@@ -87,9 +89,10 @@ for image_index=good_image_indices
     depth_img_2D = imresize(depth_img_2D,scaling);
     depth_img_2D = double(depth_img_2D)/255;
     
-    % Pre-processing; perform bg sub on GelSight image and
-    % convert heightmap to r- and c- gradient maps.
+    % Pre-processing; perform bg sub on GelSight image
     ref_img_2D = ref_img_2D - background_2D;
+    
+    % Convert heightmap to r- and c- gradient maps.
     gradr_img_2D = zeros(size(depth_img_2D));
     for color=1:3
         gradr_img_2D(:,:,color) = conv2(depth_img_2D(:,:,color),[1,-1]','same');
@@ -110,6 +113,8 @@ for image_index=good_image_indices
     %Make 1D version of images and store them for later
     ref_img = reshape(ref_img_2D, [rows*cols, 3]);
     depth_img = reshape(depth_img_2D, [rows*cols, 3]);
+    gradr_img = reshape(gradr_img_2D, [rows*cols, 3]);
+    gradc_img = reshape(gradc_img_2D, [rows*cols, 3]);
     
     ref_imgs{image_index} = ref_img;
     depth_imgs{image_index} = depth_img;
@@ -142,7 +147,7 @@ for image_index=good_image_indices
         r = khfrows + roff;
         c = khfcols + coff;
         
-        in = depth_img(kernel_slid==1, :);
+        in = cat(1,gradr_img(kernel_slid==1, :),gradc_img(kernel_slid==1, :));
         out = ref_img_2D(r,c,:);
         
         A(i,:,:) = in;
@@ -152,7 +157,6 @@ for image_index=good_image_indices
     end
     disp(numel(in));
     disp(numel(out));
-    %scatter(sampd(:,1),sampd(:,2));
 
     As{image_index}=A;
     bs{image_index}=b;
@@ -188,54 +192,61 @@ for color=1:3
     full_model_lin(:,color) = Amat \ bvec; %lsqlin(Amat, bvec, Amat*0, bvec*0);
 end
 
-filter_lin = full_model_lin(1:(krows*kcols),:,:);
-filter_2D = reshape(filter_lin, krows, kcols, 3);
-filter_2D = imrotate(filter_2D, 180);
+filter_r_lin = full_model_lin(1:numel(kernel_2D),:,:);
+filter_r_2D = reshape(filter_r_lin, krows, kcols, 3);
+filter_r_2D = imrotate(filter_r_2D, 180);
+filter_c_lin = full_model_lin((numel(kernel_2D)+1):(2*numel(kernel_2D)),:,:);
+filter_c_2D = reshape(filter_c_lin, krows, kcols, 3);
+filter_c_2D = imrotate(filter_c_2D, 180);
 
-%test_imgs = {'cleandepth/ref5.png','cleandepth/ref21.png','cleandepth/ref70.png'};
+filter_2D = cat(4,filter_r_2D,filter_c_2D);
 
 full_fig = [];
 
-%for i=1:length(test_imgs)
-%    img_name = test_imgs{i};
 ref_imgs_2D = {};
 recon_imgs_2D = {};
+
 counter = 0;
 for image_index=good_image_indices
     counter = counter + 1;
+    
     depth_img_2D = imread([cleandepthfolder, '/ref',int2str(image_index),'.png']);
-    filter_2D_recon = imresize(filter_2D, size(depth_img_2D,1)/size(background_2D,1));
-    filter_2D_recon = filter_2D_recon / (size(depth_img_2D,1)/size(background_2D,1));% / (size(depth_img_2D,1)/size(background_2D,1));
     depth_img_2D = double(depth_img_2D)/255;
-%     for color=1:3
-%         depth_img_2D(:,:,color) = conv2(depth_img_2D(:,:,color), [0,1,0;1,0,-1;0,-1,0], 'same');
-%     end
+    gradr_img_2D = zeros(size(depth_img_2D));
+    for color=1:3
+        gradr_img_2D(:,:,color) = conv2(depth_img_2D(:,:,color),[1,-1]','same');
+    end
+    gradc_img_2D = zeros(size(depth_img_2D));
+    for color=1:3
+        gradc_img_2D(:,:,color) = conv2(depth_img_2D(:,:,color),[1,-1],'same');        
+    end
+    
+    filter_2D_r_recon = imresize(filter_2D(:,:,:,1), size(depth_img_2D,1)/size(background_2D,1));
+    filter_2D_r_recon = filter_2D_r_recon / (size(depth_img_2D,1)/size(background_2D,1));
+    filter_2D_c_recon = imresize(filter_2D(:,:,:,2), size(depth_img_2D,1)/size(background_2D,1));
+    filter_2D_c_recon = filter_2D_c_recon / (size(depth_img_2D,1)/size(background_2D,1));
     
     ref_img_2D = imread([cleanrgbfolder, '/ref',int2str(image_index),'.png']);
     ref_img_2D = double(ref_img_2D)/255;
 
     %Reconstruct ref_img_2D from depth_img_2D
-    recon_2D = [];
+    recon_2D = zeros(size(depth_img_2D));
     for color=1:3
-        recon_color = conv2(depth_img_2D(:,:,color), filter_2D_recon(:,:,color), 'same');
-
-        recon_2D = cat(3, recon_2D, recon_color);
+        recon_2D(:,:,color) = conv2(gradr_img_2D(:,:,color), filter_2D_r_recon(:,:,color), 'same') + ...
+            conv2(gradc_img_2D(:,:,color), filter_2D_c_recon(:,:,color), 'same');
     end
 
-    %recon_2D = (recon_2D - min(min(min(recon_2D)))) / (max(max(max(recon_2D))) - min(min(min(recon_2D))));
     recon_2D = max(recon_2D, 0*recon_2D);
     background_2D_recon = imread([cleanrgbfolder, '/ref',int2str(background_image_index),'.png']);
     background_2D_recon = imresize(background_2D_recon, size(depth_img_2D,1)/size(background_2D_recon,1));
     background_2D_recon = double(background_2D_recon)/255;
     recon_2D = recon_2D + background_2D_recon;
 
-    %subplot(1,3,1);
-    %imshow(depth_img_2D);
-    %subplot(1,3,2);
-    %imshow(ref_img_2D);
-    %subplot(1,3,3);
-    %imshow(recon_2D);
-    next_fig = cat(1, depth_img_2D, ref_img_2D, recon_2D);
+    grads_img_2D = zeros(size(depth_img_2D));
+    grads_img_2D(:,:,1) = max(gradr_img_2D(:,:,1), 0*gradr_img_2D(:,:,1));
+    grads_img_2D(:,:,2) = max(gradc_img_2D(:,:,1), 0*gradc_img_2D(:,:,1));
+    
+    next_fig = cat(1, grads_img_2D, ref_img_2D, recon_2D);
     if isempty(full_fig)
         full_fig = next_fig;
     else
@@ -272,9 +283,9 @@ figure;
 imshow(full_fig);
 
 figure;
-imshow(filter_2D);%imresize(filter_2D,20));
+imshow(filter_r_2D);%imresize(filter_2D,20));
 
-filter = filter_2D;
+filter = filter_r_2D;
 bg = background_2D;
 
 end
