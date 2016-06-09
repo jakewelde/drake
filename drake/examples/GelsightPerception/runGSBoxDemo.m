@@ -1,4 +1,4 @@
-function runGSCubeDemo
+function runGSBoxDemo
 
 % Make a world to collide against
 r = GSSimpleBox();
