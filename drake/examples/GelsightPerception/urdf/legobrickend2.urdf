@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot name="legobrickend">
+  <link name="base_link">
+    <inertial>
+      <mass value="0.5"/>
+      <origin xyz="0 0 0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size=".84 .96 2.0"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size=".84 .96 2.0"/>
+      </geometry>
+    </collision>
+  </link>
+  <frame link="base_link" name="box_frame" rpy="0 0 0" xyz="0 0 0" />
+</robot>

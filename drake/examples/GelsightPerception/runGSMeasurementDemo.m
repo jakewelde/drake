@@ -2,10 +2,10 @@ function runGSMeasurementDemo
 
     % Load measured images
     refs_list = dir('samplevideo');
-    image_index = 187+0*112;
+    image_index = 1+187+0*112;
     
     % Make a world to collide against
-    r = GSLegoEnd();% GSSimpleBox();
+    r = GSLegoEndSpecial();% GSSimpleBox();
     v = r.constructVisualizer();
     x0 = Point(getStateFrame(r));
     use_margins = false;
@@ -42,11 +42,11 @@ function runGSMeasurementDemo
 
     gs_manifold_x_default = gs_manifold_x_default + repmat(approach_vec, 1, size(gs_manifold_x_default,2));
 
-    M = 30;
+    M = 150;
 
-    x_lo = [-gs_height/2,-gs_width/2,0,-pi/4,-pi/4,-pi/2];
-    x_hi = [gs_height/2,gs_width/2,0,pi/4,pi/4,pi/2];
-    x_sigma = (x_hi - x_lo)/2;
+    x_lo = [-gs_height/2,-gs_width/2,-2*gs_thickness,-pi/2,-pi/2,-pi/2];
+    x_hi = [gs_height/2,gs_width/2,0,pi/2,pi/2,pi/2];
+    x_sigma = (x_hi - x_lo)/6;
     
     parts = zeros(M,length(x_sigma));
     for m=1:M
@@ -61,7 +61,7 @@ function runGSMeasurementDemo
     gs_bg = tr.a.gs_bg;
     gs_filter = tr.a.gs_filter;
     
-    measured_img = double(imread(['samplevideo/',refs_list(3).name]));
+    measured_img = double(imread(['samplevideo/',refs_list(4).name]));
     measured_img = measured_img / 255.0;
     measured_img = imresize(measured_img, gs_pixelw/size(measured_img,2));
     gs_bg = measured_img;
@@ -91,20 +91,37 @@ function runGSMeasurementDemo
 %                 drawnow;
 %             end
 
-            weights_new(m) = probMatchGelSight(depth_img_2D, measured_img, gs_bg, gs_filter);
+            weights_new(m) = probMatchGelSightNaive(depth_img_2D, measured_img, gs_bg);
         end
                 
         %Some nice pictures
-        [~,best_ind] = max(weights_new);
-        % mean_x = parts_new(best_ind,:);
+        %[~,best_ind] = max(weights_new);
+        %mean_x = parts_new(best_ind,:);
         mean_x = weights_new' * parts_new;
         mean_depth_img = make_image(mean_x);
-        mean_color_img = zeros(size(mean_depth_img,1), size(mean_depth_img,2), 1);
-        for color=1:3
-            mean_color_img(:,:,color) = conv2(mean_depth_img(:,:,color), gs_filter(:,:,color), 'same');
+%         mean_color_img = zeros(size(mean_depth_img,1), size(mean_depth_img,2), 1);
+%         for color=1:3
+%             mean_color_img(:,:,color) = conv2(mean_depth_img(:,:,color), gs_filter(:,:,color), 'same');
+%         end
+%         mean_color_img = mean_color_img + gs_bg;
+        gradr_img_2D = conv2(mean_depth_img(:,:,1),[1,-1]','same');
+        gradc_img_2D = conv2(mean_depth_img(:,:,1),[1,-1],'same');
+        normals_img_2D = zeros(size(mean_depth_img));
+        normals_img_2D(:,:,1) = -gradr_img_2D;
+        normals_img_2D(:,:,2) = -gradc_img_2D;
+        normals_img_2D(:,:,3) = ones(size(mean_depth_img(:,:,3)));
+        norms_img_2D = zeros(size(normals_img_2D(:,:,1)));
+        for direction=1:3
+            norms_img_2D = norms_img_2D + normals_img_2D(:,:,direction) .* ...
+                normals_img_2D(:,:,direction);
         end
-        mean_color_img = mean_color_img + gs_bg;
-        imshow(imresize(cat(2,mean_depth_img,mean_color_img,measured_img),3.0));
+        for direction=1:3
+            normals_img_2D(:,:,direction) = normals_img_2D(:,:,direction) ./ ...
+                norms_img_2D;
+        end
+        mags_img_2D = repmat(sin(2*acos(normals_img_2D(:,:,3))),[1,1,3]);
+        mean_color_img = mags_img_2D;
+        imshow(imresize(cat(2,mean_depth_img,mean_color_img,measured_img-gs_bg),3.0));
         drawnow;        
         
         % Amplify those particles which have higher weight
@@ -120,7 +137,7 @@ function runGSMeasurementDemo
         xi = x0;
         xi.base_x = x(1);
         xi.base_y = x(2);
-        xi.base_z = x(3);
+        %xi.base_z = x(3); %% See below
         xi.base_roll = x(4);
         xi.base_pitch = x(5);
         xi.base_yaw = x(6);
@@ -130,7 +147,7 @@ function runGSMeasurementDemo
         gs_manifold_x_unslided = gs_manifold_x_default;
         slide_amount = collisionApproachGelSight(r, kinsol, gs_manifold_x_unslided, -approach_vec*2, use_margins);
 
-        slide_vector = (-approach_vec) * (slide_amount) / norm(approach_vec);
+        slide_vector = (-approach_vec) * (slide_amount) / norm(approach_vec)  +  x(3);
         gs_manifold_x = gs_manifold_x_unslided + repmat(slide_vector, 1, size(gs_manifold_x_unslided,2));
         gs_manifold_n = gs_manifold_n_default;
 

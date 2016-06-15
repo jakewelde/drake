@@ -240,7 +240,7 @@ for image_index=good_image_indices
     background_2D_recon = imread([cleanrgbfolder, '/ref',int2str(background_image_index),'.png']);
     background_2D_recon = imresize(background_2D_recon, size(depth_img_2D,1)/size(background_2D_recon,1));
     background_2D_recon = double(background_2D_recon)/255;
-    recon_2D = recon_2D + background_2D_recon;
+    recon_2D = recon_2D*numel(filter_2D) + background_2D_recon;
 
     grads_img_2D = zeros(size(depth_img_2D));
     grads_img_2D(:,:,1) = max(gradr_img_2D(:,:,1), 0*gradr_img_2D(:,:,1));
