@@ -45,7 +45,7 @@ good_image_indices = [65, 138, 336 ...
 %Kernel ... ones indicate membership, zeros nonmembership.
 % Centered about middle row and column
 kernel_2D = ones(15,15);
-num_samps = 5500;
+num_samps = 2500;
 scaling = .2;
 
 assert(sum(sum(kernel_2D==0 | kernel_2D==1)) == numel(kernel_2D)); 
@@ -54,11 +54,13 @@ As = {};
 bs = {};
 ref_imgs = {};
 depth_imgs = {};
+ref_imgs_2D = {};
+depth_imgs_2D = {};
 
 background_2D = imread([cleanrgbfolder, '/ref',int2str(background_image_index),'.png']);
 background_2D = imresize(background_2D,scaling);
 background_2D = double(background_2D)/255;
-    
+
 for image_index=good_image_indices
     % allocate the regression matrix A
     A = zeros(num_samps * length(good_image_indices),numel(kernel_2D),3);
@@ -72,6 +74,9 @@ for image_index=good_image_indices
     depth_img_2D = double(depth_img_2D)/255;
     
     ref_img_2D = ref_img_2D - background_2D;
+    
+    ref_imgs_2D{image_index} = ref_img_2D;
+    depth_imgs_2D{image_index} = depth_img_2D;
     
 %     for color=1:3
 %         ref_img_2D(:,:,color) = conv2(ref_img_2D(:,:,color), [0,1,0;1,0,-1;0,-1,0], 'same');
