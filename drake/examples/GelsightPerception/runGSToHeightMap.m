@@ -1,7 +1,7 @@
 function runGSToHeightMap(render_display)
 
     if nargin < length({'render_display'})
-        render_display = false;
+        render_display = true;
     end
     
     if render_display
@@ -20,7 +20,7 @@ function runGSToHeightMap(render_display)
     lc.subscribe('GELSIGHT_RAW',lcmonitor_image_raw);
     
     last_few_times = repmat(cputime, [5 1]);   
-    last_few_times_marker = 1
+    last_few_times_marker = 1;
     while true
 
         %% Grab next GelSight image
@@ -45,7 +45,7 @@ function runGSToHeightMap(render_display)
             
             ref_img_2D = measured_img - gs_bg;
 
-            heightmap_recon_2D = convertGStoHM(ref_img_2D,gs_filter);        
+            heightmap_recon_2D = convertGStoHM(ref_img_2D,gs_filter,false);        
 
             heightmap_recon_2D = heightmap_recon_2D';
             
@@ -66,7 +66,8 @@ function runGSToHeightMap(render_display)
 
             %disp(heightmap_recon_2D(1,1));
             if render_display
-                imshow(cat(2,ref_img_2D,repmat(heightmap_recon_2D',[1 1 3])));
+                surf(heightmap_recon_2D);
+                axis([0 120 0 160 0 1]);
                 drawnow;
             end
             
