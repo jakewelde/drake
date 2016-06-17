@@ -23,8 +23,11 @@ function runGSToHeightMap(render_display)
     last_few_times_marker = 1;
     while true
 
-        %% Grab next GelSight image
-        data_image_raw = lcmonitor_image_raw.getMessage();
+        %% Grab next GelSight image, chugging through up to a 100x
+        % drop rate
+        for i=1:100
+            data_image_raw = lcmonitor_image_raw.getMessage();
+        end
         if (~isempty(data_image_raw))
             data_image_t = bot_core.image_t(data_image_raw);
             data = data_image_t.data;
