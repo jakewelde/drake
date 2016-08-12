@@ -67,7 +67,8 @@ class InstantaneousQPController {
 
   const RigidBodyTree<double>& getRobot() const { return *robot; }
   const RobotPropertyCache& getRPC() const { return rpc; }
-  const QPControllerParams& getParamSet(const std::string param_set_name);
+  const QPControllerParams& getParamSet(const std::string param_set_name)
+    { return param_sets.at(param_set_name); };
   const JointNames& getJointNames() { return input_joint_names; }
   const QPControllerState& getControllerState() { return controller_state; }
 
