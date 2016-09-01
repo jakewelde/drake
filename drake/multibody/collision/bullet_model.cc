@@ -30,7 +30,7 @@ static const int kMinimumPointsPerturbationThreshold = 8;
 
 namespace {
 // Converts between two representations of a pose.
-btTransform convert(const Isometry3d &T) {
+btTransform convert(const Isometry3d &T, double kGlobalScaling) {
   btTransform btT;
   btMatrix3x3 rot;
   btVector3 pos;
@@ -39,7 +39,8 @@ btTransform convert(const Isometry3d &T) {
                T(2, 1), T(2, 2));
   btT.setBasis(rot);
   pos.setValue(T(0, 3), T(1, 3), T(2, 3));
-  btT.setOrigin(pos);
+  btT.setOrigin(kGlobalScaling*pos);
+
   return btT;
 }
 }  // namespace
@@ -109,8 +110,9 @@ BulletCollisionWorldWrapper::BulletCollisionWorldWrapper()
 std::unique_ptr<btCollisionShape> BulletModel::newBulletBoxShape(
     const DrakeShapes::Box& geometry, bool use_margins) {
   std::unique_ptr<btCollisionShape> bt_shape(new btConvexHullShape());
-  btBoxShape bt_box(btVector3(geometry.size(0) / 2, geometry.size(1) / 2,
-                              geometry.size(2) / 2));
+  btBoxShape bt_box(btVector3(kGlobalScaling * geometry.size(0) / 2, 
+                              kGlobalScaling * geometry.size(1) / 2,
+                              kGlobalScaling * geometry.size(2) / 2));
   /* Strange things happen to the collision-normals when we use the
    * convex interface to the btBoxShape. Instead, we'll explicitly create
    * a btConvexHullShape.
@@ -131,14 +133,20 @@ std::unique_ptr<btCollisionShape> BulletModel::newBulletBoxShape(
 std::unique_ptr<btCollisionShape> BulletModel::newBulletSphereShape(
     const DrakeShapes::Sphere& geometry, bool use_margins) {
   std::unique_ptr<btCollisionShape> bt_shape(
-      new btSphereShape(geometry.radius));
+      new btSphereShape(kGlobalScaling * geometry.radius));
   return bt_shape;
 }
 
 std::unique_ptr<btCollisionShape> BulletModel::newBulletCylinderShape(
     const DrakeShapes::Cylinder& geometry, bool use_margins) {
   std::unique_ptr<btCollisionShape> bt_shape(new btCylinderShapeZ(
-      btVector3(geometry.radius, geometry.radius, geometry.length / 2)));
+      btVector3(kGlobalScaling * geometry.radius, 
+                kGlobalScaling * geometry.radius, 
+                kGlobalScaling * geometry.length / 2)));
+  if (use_margins)
+    bt_shape->setMargin(kLargeMargin);
+  else
+    bt_shape->setMargin(kSmallMargin);
   return bt_shape;
 }
 
@@ -146,10 +154,10 @@ std::unique_ptr<btCollisionShape> BulletModel::newBulletCapsuleShape(
     const DrakeShapes::Capsule& geometry, bool use_margins) {
   std::unique_ptr<btCollisionShape> bt_shape(new btConvexHullShape());
   dynamic_cast<btConvexHullShape*>(bt_shape.get())
-      ->addPoint(btVector3(0, 0, -geometry.length / 2));
+      ->addPoint(btVector3(0, 0, kGlobalScaling * -geometry.length / 2));
   dynamic_cast<btConvexHullShape*>(bt_shape.get())
-      ->addPoint(btVector3(0, 0, geometry.length / 2));
-  bt_shape->setMargin(geometry.radius);
+      ->addPoint(btVector3(0, 0, kGlobalScaling * geometry.length / 2));
+  bt_shape->setMargin(kGlobalScaling * geometry.radius);
   return bt_shape;
 }
 
@@ -166,7 +174,8 @@ std::unique_ptr<btCollisionShape> BulletModel::newBulletMeshShape(
         dynamic_cast<btConvexHullShape*>(bt_shape.get());
     for (int i = 0; i < vertices.cols(); i++) {
       bt_convex_hull_shape->addPoint(
-          btVector3(vertices(0, i), vertices(1, i), vertices(2, i)), false);
+          kGlobalScaling *
+            btVector3(vertices(0, i), vertices(1, i), vertices(2, i)), false);
     }
     bt_convex_hull_shape->recalcLocalAabb();
 
@@ -224,7 +233,9 @@ std::unique_ptr<btCollisionShape> BulletModel::newBulletStaticMeshShape(
         vertices[tri(1)](0), vertices[tri(1)](1), vertices[tri(1)](2));
     btVector3 vertex2(
         vertices[tri(2)](0), vertices[tri(2)](1), vertices[tri(2)](2));
-    mesh_interface->addTriangle(vertex0, vertex1, vertex2);
+    mesh_interface->addTriangle(kGlobalScaling * vertex0, 
+                                kGlobalScaling * vertex1, 
+                                kGlobalScaling * vertex2);
   }
 
   // Instantiates a Bullet collision object with a btBvhTriangleMeshShape shape.
@@ -254,7 +265,8 @@ std::unique_ptr<btCollisionShape> BulletModel::newBulletMeshPointsShape(
   auto bt_convex_hull_shape = dynamic_cast<btConvexHullShape*>(bt_shape.get());
   for (int i = 0; i < geometry.points.cols(); i++) {
     bt_convex_hull_shape->addPoint(
-        btVector3(geometry.points(0, i), geometry.points(1, i),
+        kGlobalScaling * 
+          btVector3(geometry.points(0, i), geometry.points(1, i),
                   geometry.points(2, i)),
         false);
   }
@@ -388,7 +400,7 @@ void BulletModel::DoAddElement(const Element& element) {
       // objects will have their world transform set.  This code assumes that
       // the world transform on the corresponding input Drake element has
       // already been properly set. (See RigidBodyTree::CompileCollisionState.)
-      btTransform btT = convert(element.getWorldTransform());
+      btTransform btT = convert(element.getWorldTransform(), 1.0);
       bt_obj->setWorldTransform(btT);
       bt_obj_no_margin->setWorldTransform(btT);
       bullet_world_.bt_collision_world->
@@ -478,8 +490,8 @@ std::vector<PointPair> BulletModel::potentialCollisionPoints(bool use_margins) {
 
       point_pairs.emplace_back(
           elements[idA].get(), elements[idB].get(),
-          point_on_A, point_on_B, toVector3d(normal_on_B),
-          static_cast<double>(pt.getDistance()) + marginA + marginB);
+          point_on_A / kGlobalScaling, point_on_B / kGlobalScaling, toVector3d(normal_on_B),
+          (static_cast<double>(pt.getDistance()) + marginA + marginB) / kGlobalScaling);
     }
   }
 
@@ -491,7 +503,7 @@ std::vector<PointPair> BulletModel::potentialCollisionPoints(bool use_margins) {
 bool BulletModel::collidingPointsCheckOnly(
     const std::vector<Vector3d>& input_points, double collision_threshold) {
   // Create sphere geometry
-  btSphereShape bt_shape(collision_threshold);
+  btSphereShape bt_shape(kGlobalScaling * collision_threshold);
 
   // Create Bullet collision object
   btCollisionObject bt_obj;
@@ -507,7 +519,7 @@ bool BulletModel::collidingPointsCheckOnly(
     btVector3 pos(static_cast<btScalar>(input_points[i](0)),
                   static_cast<btScalar>(input_points[i](1)),
                   static_cast<btScalar>(input_points[i](2)));
-    btT.setOrigin(pos);
+    btT.setOrigin(kGlobalScaling * pos);
     bt_obj.setWorldTransform(btT);
 
     bt_world.bt_collision_world->contactTest(&bt_obj, c);
@@ -523,7 +535,7 @@ bool BulletModel::collidingPointsCheckOnly(
 std::vector<size_t> BulletModel::collidingPoints(
     const std::vector<Vector3d>& input_points, double collision_threshold) {
   // Create sphere geometry
-  btSphereShape bt_shape(collision_threshold);
+  btSphereShape bt_shape(kGlobalScaling * collision_threshold);
 
   // Create Bullet collision object
   btCollisionObject bt_obj;
@@ -540,7 +552,7 @@ std::vector<size_t> BulletModel::collidingPoints(
     btVector3 pos(static_cast<btScalar>(input_points[i](0)),
                   static_cast<btScalar>(input_points[i](1)),
                   static_cast<btScalar>(input_points[i](2)));
-    btT.setOrigin(pos);
+    btT.setOrigin(kGlobalScaling * pos);
     bt_obj.setWorldTransform(btT);
 
     bt_world.bt_collision_world->contactTest(&bt_obj, c);
@@ -558,7 +570,7 @@ bool BulletModel::updateElementWorldTransform(
   const bool element_exists(
       Model::updateElementWorldTransform(id, T_local_to_world));
   if (element_exists) {
-    btTransform btT = convert(elements[id]->getWorldTransform());
+    btTransform btT = convert(elements[id]->getWorldTransform(), kGlobalScaling);
 
     auto bt_obj_iter = bullet_world_.bt_collision_objects.find(id);
     auto bt_obj_no_margin_iter =
@@ -600,16 +612,16 @@ PointPair BulletModel::findClosestPointsBetweenElements(
     double distance = (xA_world - xB_world).norm();
     return PointPair(
         elements[idA].get(), elements[idB].get(),
-        elements[idA]->getLocalTransform() * TA_world.inverse() *
+        (elements[idA]->getLocalTransform() * TA_world.inverse() *
             (xA_world +
              (xB_world - xA_world) * radiusA /
-                 distance),  // ptA (in body A coords)
-        elements[idB]->getLocalTransform() * TB_world.inverse() *
+                 distance)) / kGlobalScaling,  // ptA (in body A coords)
+        (elements[idB]->getLocalTransform() * TB_world.inverse() *
             (xB_world +
              (xA_world - xB_world) * radiusB /
-                 distance),  // ptB (in body B coords)
-        (xA_world - xB_world) / distance,
-        distance - radiusA - radiusB);
+                 distance)) / kGlobalScaling,  // ptB (in body B coords)
+        (xA_world - xB_world) / distance, // normal
+        (distance - radiusA - radiusB) / kGlobalScaling);
   }
 
   btConvexShape* shapeA;
@@ -686,9 +698,9 @@ PointPair BulletModel::findClosestPointsBetweenElements(
 
   if (gjkOutput.m_hasResult) {
     return PointPair(elements[idA].get(), elements[idB].get(),
-                     point_on_A, point_on_B,
+                     point_on_A / kGlobalScaling, point_on_B / kGlobalScaling,
                      toVector3d(gjkOutput.m_normalOnBInWorld),
-                     static_cast<double>(distance));
+                     static_cast<double>(distance) / kGlobalScaling);
   } else {
     throw std::runtime_error(
         "In BulletModel::findClosestPointsBetweenElements: "
@@ -738,27 +750,28 @@ void BulletModel::collisionDetectFromPoints(
 
         input.m_transformA =
             btTransform(btQuaternion(1, 0, 0, 0),
-                        btVector3(points(0, i), points(1, i), points(2, i)));
+                        kGlobalScaling * btVector3(points(0, i), points(1, i), points(2, i)));
         input.m_transformB = bt_objB->getWorldTransform();
 
         convexConvex.getClosestPoints(input, gjkOutput, 0);
 
         btVector3 pointOnAinWorld(points(0, i), points(1, i), points(2, i));
+        pointOnAinWorld *= kGlobalScaling;
         btVector3 pointOnBinWorld = gjkOutput.m_pointInWorld;
 
-        if (gjkOutput.m_hasResult && (!got_one || gjkOutput.m_distance < phi[i])) {
+        if (gjkOutput.m_hasResult && (!got_one || gjkOutput.m_distance / kGlobalScaling < phi[i])) {
           btVector3 pointOnElemB = input.m_transformB.invXform(pointOnBinWorld);
-          phi[i] = gjkOutput.m_distance;
+          phi[i] = gjkOutput.m_distance / kGlobalScaling;
           got_one = true;
           Element* collision_element =
               static_cast<Element*>(bt_objB->getUserPointer());
           closest_points[i] =
               PointPair(collision_element, collision_element,
-                        elements[bt_objB_iter->first]->getLocalTransform()*
-                           toVector3d(pointOnElemB),
-                        toVector3d(pointOnBinWorld),
-                        toVector3d(gjkOutput.m_normalOnBInWorld), 
-                                   gjkOutput.m_distance);
+                        (elements[bt_objB_iter->first]->getLocalTransform()*
+                           toVector3d(pointOnElemB)) / kGlobalScaling,
+                        toVector3d(pointOnBinWorld) / kGlobalScaling,
+                        toVector3d(gjkOutput.m_normalOnBInWorld),
+                                   gjkOutput.m_distance / kGlobalScaling);
         }
       }
     }
@@ -786,7 +799,7 @@ bool BulletModel::collisionRaycast(const Matrix3Xd &origins,
                                    Matrix3Xd &normals,
                                    std::vector<ElementId>& collision_body)
 {
-  
+
   distances.resize(origins.cols());
   normals.resize(3, origins.cols());
   collision_body.resize(origins.cols());
@@ -801,6 +814,8 @@ bool BulletModel::collisionRaycast(const Matrix3Xd &origins,
                              origins(2, origin_col));
     btVector3 ray_to_world(ray_endpoints(0, i), ray_endpoints(1, i),
                            ray_endpoints(2, i));
+    ray_from_world *= kGlobalScaling;
+    ray_to_world *= kGlobalScaling;
 
     // ClosestRayResultCallback inherits from RayResultCallback.
     btCollisionWorld::ClosestRayResultCallback ray_callback(ray_from_world,
@@ -844,7 +859,7 @@ bool BulletModel::collisionRaycast(const Matrix3Xd &origins,
     if (ray_callback.hasHit()) {
       // compute distance to hit
 
-      btVector3 end = ray_callback.m_hitPointWorld;
+      btVector3 end = ray_callback.m_hitPointWorld / kGlobalScaling;
 
       Vector3d end_eigen(end.getX(), end.getY(), end.getZ());
 
@@ -958,8 +973,10 @@ bool BulletModel::ComputeMaximumDepthCollisionPoints(
 
         collision_points.emplace_back(
             elementA, elementB,
-            toVector3d(ptA), toVector3d(ptB), toVector3d(normalOnB),
-            static_cast<double>(pt.getDistance() + marginA + marginB));
+            toVector3d(ptA) / kGlobalScaling, 
+            toVector3d(ptB) / kGlobalScaling, 
+            toVector3d(normalOnB),
+            (static_cast<double>(pt.getDistance() + marginA + marginB)) / kGlobalScaling );
       }
     }
   }

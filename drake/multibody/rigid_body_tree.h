@@ -753,9 +753,9 @@ class RigidBodyTree {
   bool collisionRaycast(const KinematicsCache<double>& cache,
                         const Eigen::Matrix3Xd& origins,
                         const Eigen::Matrix3Xd& ray_endpoints,
+                        bool use_margins,
                         Eigen::VectorXd& distances, Eigen::Matrix3Xd& normals,
-                        std::vector<int>& collision_body,
-                        bool use_margins = false);
+                        std::vector<long unsigned int>& collision_body);
 
   /** collisionDetectFromPoints
    * @brief Computes the (signed) distance from the given points to the nearest
