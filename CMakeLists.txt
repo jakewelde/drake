@@ -189,6 +189,8 @@ drake_add_external(lcm PUBLIC CMAKE
 
 # libbot
 drake_add_external(libbot PUBLIC CMAKE
+  CMAKE_ARGS
+    -DWITH_BOT_VIS=ON
   DEPENDS lcm)
 
 # bot_core_lcmtypes
