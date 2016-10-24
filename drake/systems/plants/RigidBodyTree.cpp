@@ -531,6 +531,7 @@ void RigidBodyTree::collisionDetectFromPoints(
   body_x.resize(3, closest_points.size());
   normal.resize(3, closest_points.size());
   phi.resize(closest_points.size());
+  body_idx.resize(closest_points.size());
 
   for (size_t i = 0; i < closest_points.size(); ++i) {
     x.col(i) = closest_points[i].ptB;
@@ -538,7 +539,7 @@ void RigidBodyTree::collisionDetectFromPoints(
     normal.col(i) = closest_points[i].normal;
     phi[i] = closest_points[i].distance;
     const DrakeCollision::Element* elementB = closest_points[i].elementB;
-    body_idx.push_back(elementB->get_body()->get_body_index());
+    body_idx[i] = elementB->get_body()->get_body_index();
   }
 }
 
@@ -547,9 +548,10 @@ bool RigidBodyTree::collisionRaycast(const KinematicsCache<double>& cache,
                                      const Matrix3Xd& ray_endpoints,
                                      VectorXd& distances, bool use_margins) {
   Matrix3Xd normals;
-  updateDynamicCollisionElements(cache);
-  return collision_model_->collisionRaycast(origins, ray_endpoints, use_margins,
-                                           distances, normals);
+  std::vector<int> body_idx;
+  return collisionRaycast(cache, origins, ray_endpoints,
+                          distances, normals, 
+                          body_idx, use_margins);
 }
 
 bool RigidBodyTree::collisionRaycast(const KinematicsCache<double>& cache,
@@ -557,10 +559,39 @@ bool RigidBodyTree::collisionRaycast(const KinematicsCache<double>& cache,
                                      const Matrix3Xd& ray_endpoints,
                                      VectorXd& distances, Matrix3Xd& normals,
                                      bool use_margins) {
-  updateDynamicCollisionElements(cache);
-  return collision_model_->collisionRaycast(origins, ray_endpoints, use_margins,
-                                           distances, normals);
+  std::vector<int> body_idx;
+  return collisionRaycast(cache, origins, ray_endpoints, distances, normals, 
+                          body_idx, use_margins);
 }
+
+bool RigidBodyTree::collisionRaycast(const KinematicsCache<double>& cache,
+                                     const Matrix3Xd &origins,
+                                     const Matrix3Xd &ray_endpoints,
+                                     VectorXd &distances,
+                                     Matrix3Xd &normals,
+                                     std::vector<int>& body_idx,
+                                     bool use_margins )
+{
+  updateDynamicCollisionElements(cache);
+
+  std::vector<DrakeCollision::ElementId> collision_body;
+  bool ret = collision_model_->collisionRaycast(origins, ray_endpoints, 
+                     use_margins, distances, normals, collision_body);
+
+  body_idx.resize(collision_body.size());
+  for (size_t i = 0; i < collision_body.size(); i++){
+    if (distances[i] < 0.0){
+      body_idx[i] = -1;
+    } else {
+      const DrakeCollision::Element* element = 
+             dynamic_cast<const DrakeCollision::Element*>(
+              collision_model_->FindElement(collision_body[i]));
+      body_idx[i] = element->get_body()->get_body_index();
+    }
+  }
+  return ret;
+}
+
 
 bool RigidBodyTree::collisionDetect(
     const KinematicsCache<double>& cache, VectorXd& phi, Matrix3Xd& normal,
@@ -1941,7 +1972,7 @@ RigidBody* RigidBodyTree::FindBody(const std::string& body_name,
 
     // Skips the current body if model_name is not empty and the body's model
     // name is not equal to the desired model name.
-    if (!model_name_lower.empty() && model_name_lower != current_model_name)
+    if (!model_name_lower.empty() && current_model_name != model_name_lower)
       continue;
 
     // Obtains a lower case version of the current body's name.
@@ -1952,15 +1983,30 @@ RigidBody* RigidBodyTree::FindBody(const std::string& body_name,
     // Checks if the body names match. If so, checks whether this is the first
     // match. If so, it saves the current body's index. Otherwise it throws
     // an exception indicating there are multiple matches.
-    if (current_body_name == body_name_lower) {
-      if (match_index < 0) {
-        match_index = i;
-      } else {
-        throw std::logic_error(
-            "RigidBodyTree::FindBody: ERROR: found multiple bodys named \"" +
-            body_name + "\", model name = \"" + model_name +
-            "\", model instance id = " + std::to_string(model_instance_id) +
-            ".");
+    // The MATLAB parser still merges links with + signs if they are
+    // welded, so we split by + and look over all individual links in
+    // the weld.
+    size_t substr_start = 0;
+    size_t substr_end = -1;
+    while (substr_end != current_body_name.length()){
+      // find next delimeter or end of string
+      substr_start = substr_end + 1;
+      substr_end = current_body_name.find("+", substr_start); 
+      if (substr_end == string::npos)
+        substr_end = current_body_name.length();
+
+      // check if this is our link
+      if (current_body_name.substr(substr_start, substr_end-substr_start)
+            .compare(body_name_lower) == 0) {
+        if (match_index < 0) {
+          match_index = i;
+        } else {
+          throw std::logic_error(
+              "RigidBodyTree::FindBody: ERROR: found multiple bodys named \"" +
+              body_name + "\", model name = \"" + model_name +
+              "\", model intsance id = " + std::to_string(model_instance_id) +
+              ".");
+        }
       }
     }
   }

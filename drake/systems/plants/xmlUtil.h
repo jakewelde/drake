@@ -4,6 +4,7 @@
 #include <string>
 
 #include <Eigen/Dense>
+#include "drake/thirdParty/bsd/spruce/include/spruce.hh"
 
 #include "drake/common/drake_export.h"
 #include "drake/systems/plants/pose_map.h"

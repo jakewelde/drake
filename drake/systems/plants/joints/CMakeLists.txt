@@ -20,6 +20,7 @@ drake_install_headers(
   QuaternionFloatingJoint.h
   RevoluteJoint.h
   RollPitchYawFloatingJoint.h
+  DrakeJoints.h
   floating_base_types.h)
 pods_install_pkg_config_file(drake-joints
   LIBS -ldrakeJoints

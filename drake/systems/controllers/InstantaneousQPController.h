@@ -5,8 +5,7 @@
 #include "drake/common/eigen_stl_types.h"
 #include "drake/common/drake_export.h"
 #include "drake/solvers/gurobi_qp.h"
-#include "drake/lcmt_qp_controller_input.hpp"
-
+#include "lcmtypes/drake/lcmt_qp_controller_input.hpp"
 #define INSTQP_USE_FASTQP 1
 #define INSTQP_GUROBI_OUTPUTFLAG 0
 #define INSTQP_GUROBI_METHOD 2
@@ -57,9 +56,17 @@ class DRAKE_EXPORT InstantaneousQPController {
           foot_force_torque_measurements,
       QPControllerOutput& qp_output, QPControllerDebugData* debug = NULL);
 
+  void resetControllerState(double t_new);
+
   const RigidBodyTree& getRobot() const { return *robot; }
+  const RobotPropertyCache& getRPC() const { return rpc; }
+  const QPControllerParams& getParamSet(const std::string param_set_name)
+    { return param_sets.at(param_set_name); };
+  const JointNames& getJointNames() { return input_joint_names; }
+  const QPControllerState& getControllerState() { return controller_state; }
 
   std::unordered_map<std::string, int> body_or_frame_name_to_id;
+  std::unique_ptr<RigidBodyTree> robot;
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -67,9 +74,11 @@ class DRAKE_EXPORT InstantaneousQPController {
   GRBenv* env;
   std::unique_ptr<RigidBodyTree> robot;
   drake::eigen_aligned_std_map<std::string, QPControllerParams> param_sets;
+
   RobotPropertyCache rpc;
   Eigen::VectorXd umin, umax;
   int use_fast_qp;
+  int numFloatingBaseJoints;
   JointNames input_joint_names;
 
   KinematicsCache<double> cache;
@@ -99,7 +108,8 @@ class DRAKE_EXPORT InstantaneousQPController {
   PIDOutput wholeBodyPID(double t, const Eigen::Ref<const Eigen::VectorXd>& q,
                          const Eigen::Ref<const Eigen::VectorXd>& qd,
                          const Eigen::Ref<const Eigen::VectorXd>& q_des,
-                         const WholeBodyParams& params);
+                         const Eigen::Ref<const Eigen::VectorXd>& qdot_des,
+                         const WholeBodyParams& params, bool hasFloatingBase=true);
 
   Eigen::VectorXd velocityReference(
       double t, const Eigen::Ref<const Eigen::VectorXd>& q,

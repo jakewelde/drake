@@ -33,3 +33,5 @@ DRAKE_EXPORT RobotPropertyCache parseKinematicTreeMetadata(
     const YAML::Node& metadata, const RigidBodyTree& robot);
 DRAKE_EXPORT KinematicModifications
 parseKinematicModifications(const YAML::Node& mods);
+DRAKE_EXPORT JointNames parseRobotJointNames(const YAML::Node& joint_names,
+                                const RigidBodyTree& tree);

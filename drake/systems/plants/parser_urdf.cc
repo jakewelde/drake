@@ -934,6 +934,37 @@ void ParseWorldJoint(XMLElement* node,
   }
 }
 
+void parseCollisionFilterGroup(RigidBodyTree *model, 
+                               XMLElement *node, 
+                               vector<string> &group_names, 
+                               vector<vector<string>> &group_members, 
+                               vector<vector<string>> &group_ignores)
+{
+  if (!node || !node->Attribute("name")) 
+    throw runtime_error(
+      "ERROR: collision filter group is missing a name element");
+  group_names.push_back(node->Attribute("name"));
+  group_members.resize(group_members.size() + 1);
+  group_ignores.resize(group_ignores.size() + 1);
+
+  for (XMLElement* member_node = node->FirstChildElement("member"); 
+       member_node; member_node = member_node->NextSiblingElement("member"))
+  {
+    group_members[group_names.size() - 1].push_back(
+      member_node->Attribute("link"));
+  }
+
+  for (XMLElement* ignored_group_node =  
+          node->FirstChildElement("ignored_collision_filter_group"); 
+       ignored_group_node; 
+       ignored_group_node = ignored_group_node->NextSiblingElement(
+          "ignored_collision_filter_group"))
+  {
+    group_ignores[group_names.size() - 1].push_back(
+      ignored_group_node->Attribute("collision_filter_group"));
+  }
+}
+
 ModelInstanceIdTable ParseModel(RigidBodyTree* tree, XMLElement* node,
     const PackageMap& ros_package_map, const string& root_dir,
     const FloatingBaseType floating_base_type,
@@ -953,7 +984,7 @@ ModelInstanceIdTable ParseModel(RigidBodyTree* tree, XMLElement* node,
   int model_instance_id = tree->add_model_instance();
   model_instance_id_table[model_name] = model_instance_id;
 
-  // Parses the model's material elements.
+  // Parses the tree's material elements.
   MaterialMap materials;
   for (XMLElement* material_node = node->FirstChildElement("material");
        material_node;
@@ -972,7 +1003,7 @@ ModelInstanceIdTable ParseModel(RigidBodyTree* tree, XMLElement* node,
   // floating joints.
   std::vector<int> link_indices;
 
-  // Parses the model's link elements.
+  // Parses the tree's link elements.
   for (XMLElement* link_node = node->FirstChildElement("link"); link_node;
        link_node = link_node->NextSiblingElement("link")) {
     int index;
@@ -1000,7 +1031,7 @@ ModelInstanceIdTable ParseModel(RigidBodyTree* tree, XMLElement* node,
           throw runtime_error(
               "Both weld_to_frame and world link specified. "
               "Only one may be specified when instantiating "
-              "a URDF model.");
+              "a URDF tree.");
         } else {
           // Since a world link was specified, there must be a joint that
           // connects the world to the robot's root note. The following
@@ -1014,36 +1045,73 @@ ModelInstanceIdTable ParseModel(RigidBodyTree* tree, XMLElement* node,
   // DEBUG
   // else {
   // cout << "Parsed link" << endl;
-  // cout << "model->bodies.size() = " << model->bodies.size() << endl;
-  // cout << "model->num_bodies = " << model->num_bodies << endl;
+  // cout << "tree->bodies.size() = " << tree->bodies.size() << endl;
+  // cout << "tree->num_bodies = " << tree->num_bodies << endl;
   //}
   // END_DEBUG
 
-  // todo: parse collision filter groups
+  // Parses the collision filter groups.
+  vector<string> group_names;
+  vector<vector<string>> group_members, group_ignores;
+  for (XMLElement* collision_filter_group_node = 
+          node->FirstChildElement("collision_filter_group"); 
+       collision_filter_group_node; 
+       collision_filter_group_node = 
+          collision_filter_group_node->NextSiblingElement(
+            "collision_filter_group")) {
+    parseCollisionFilterGroup(tree, 
+                              collision_filter_group_node, 
+                              group_names, 
+                              group_members, 
+                              group_ignores);
+  }
 
-  // Parses the model's joint elements.
+  // Applies collision filter groups.
+  DrakeCollision::bitmask belongs_to, ignores;
+  vector<string>::iterator ignored_group;
+  for (size_t group = 0; group < group_names.size(); group++)
+  {
+    belongs_to = DrakeCollision::NONE_MASK;
+    ignores = DrakeCollision::NONE_MASK;
+    belongs_to.set(group + 1);
+    for (auto ignored : group_ignores[group])
+    {
+    ignored_group = find(group_names.begin(), group_names.end(), ignored);
+      if (ignored_group != group_names.end())
+      {
+        ignores.set(ignored_group - group_names.begin() + 1);
+      }
+    }
+    for (auto link : group_members[group])
+    {
+      tree->FindBody(link)->addToCollisionFilterGroup(belongs_to);
+      tree->FindBody(link)->ignoreCollisionFilterGroup(ignores);
+    }
+  }
+
+  // Parses the tree's joint elements.
   for (XMLElement* joint_node = node->FirstChildElement("joint"); joint_node;
        joint_node = joint_node->NextSiblingElement("joint"))
     ParseJoint(tree, joint_node, model_instance_id);
 
-  // Parses the model's transmission elements.
+  // Parses the tree's transmission elements.
   for (XMLElement* transmission_node = node->FirstChildElement("transmission");
        transmission_node;
        transmission_node =
            transmission_node->NextSiblingElement("transmission"))
     ParseTransmission(tree, transmission_node, model_instance_id);
 
-  // Parses the model's loop joint elements.
+  // Parses the tree's loop joint elements.
   for (XMLElement* loop_node = node->FirstChildElement("loop_joint"); loop_node;
        loop_node = loop_node->NextSiblingElement("loop_joint"))
     ParseLoop(tree, loop_node, model_instance_id);
 
-  // Parses the model's Drake frame elements.
+  // Parses the tree's Drake frame elements.
   for (XMLElement* frame_node = node->FirstChildElement("frame"); frame_node;
        frame_node = frame_node->NextSiblingElement("frame"))
     ParseFrame(tree, frame_node, model_instance_id);
 
-  // Adds the floating joint(s) that connect the newly added robot model to the
+  // Adds the floating joint(s) that connect the newly added robot tree to the
   // rest of the rigid body tree.
   AddFloatingJoint(actual_floating_base_type, link_indices,
                    weld_to_frame, nullptr /* pose_map */, tree);

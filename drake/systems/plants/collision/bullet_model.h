@@ -93,7 +93,8 @@ class BulletModel : public Model {
   bool collisionRaycast(const Eigen::Matrix3Xd& origins,
                         const Eigen::Matrix3Xd& ray_endpoints, bool use_margins,
                         Eigen::VectorXd& distances,
-                        Eigen::Matrix3Xd& normals) override;
+                        Eigen::Matrix3Xd& normals,
+                        std::vector<ElementId>& collision_body) override;
 
   /** Computes the set of potential collision points for all
   eligible pairs of collision geometries in this model. This includes
@@ -137,6 +138,8 @@ class BulletModel : public Model {
 
   static constexpr double kSmallMargin = 1e-9;
   static constexpr double kLargeMargin = 0.05;
+
+  static constexpr double kGlobalScaling = 100.0;
 
   // BulletModel objects are not copyable
   BulletModel(const BulletModel&) = delete;
