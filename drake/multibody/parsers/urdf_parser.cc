@@ -953,6 +953,37 @@ void ParseWorldJoint(XMLElement* node,
   }
 }
 
+void parseCollisionFilterGroup(RigidBodyTree<double> *model, 
+                               XMLElement *node, 
+                               vector<string> &group_names, 
+                               vector<vector<string>> &group_members, 
+                               vector<vector<string>> &group_ignores)
+{
+  if (!node || !node->Attribute("name")) 
+    throw runtime_error(
+      "ERROR: collision filter group is missing a name element");
+  group_names.push_back(node->Attribute("name"));
+  group_members.resize(group_members.size() + 1);
+  group_ignores.resize(group_ignores.size() + 1);
+
+  for (XMLElement* member_node = node->FirstChildElement("member"); 
+       member_node; member_node = member_node->NextSiblingElement("member"))
+  {
+    group_members[group_names.size() - 1].push_back(
+      member_node->Attribute("link"));
+  }
+
+  for (XMLElement* ignored_group_node =  
+          node->FirstChildElement("ignored_collision_filter_group"); 
+       ignored_group_node; 
+       ignored_group_node = ignored_group_node->NextSiblingElement(
+          "ignored_collision_filter_group"))
+  {
+    group_ignores[group_names.size() - 1].push_back(
+      ignored_group_node->Attribute("collision_filter_group"));
+  }
+}
+
 ModelInstanceIdTable ParseModel(RigidBodyTree<double>* tree, XMLElement* node,
                                 const PackageMap& package_map,
                                 const string& root_dir,

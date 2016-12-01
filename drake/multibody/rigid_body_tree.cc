@@ -685,8 +685,8 @@ bool RigidBodyTree<T>::collisionRaycast(
   Matrix3Xd normals;
   std::vector<long unsigned int> body_idx;
   updateDynamicCollisionElements(cache);
-  return collision_model_->collisionRaycast(origins, ray_endpoints, use_margins,
-                                            distances, normals, body_idx);
+  return collisionRaycast(cache, origins, ray_endpoints,
+                          distances, normals, body_idx, use_margins);
 }
 
 template <typename T>
