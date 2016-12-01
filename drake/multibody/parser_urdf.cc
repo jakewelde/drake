@@ -967,7 +967,7 @@ void ParseWorldJoint(XMLElement* node,
   }
 }
 
-void parseCollisionFilterGroup(RigidBodyTree *model, 
+void parseCollisionFilterGroup(RigidBodyTree<double> *model, 
                                XMLElement *node, 
                                vector<string> &group_names, 
                                vector<vector<string>> &group_members, 
@@ -1087,6 +1087,7 @@ ModelInstanceIdTable ParseModel(RigidBodyTree<double>* tree, XMLElement* node,
                               group_names, 
                               group_members, 
                               group_ignores);
+  }
 
   // Applies collision filter groups.
   DrakeCollision::bitmask belongs_to, ignores;
