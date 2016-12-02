@@ -172,7 +172,7 @@ bool hasFloatingBase) {
   DRAKE_ASSERT(q.size() == nq);
   DRAKE_ASSERT(qd.size() == robot->get_num_velocities());
   DRAKE_ASSERT(q_des.size() == params.integrator.gains.size());
-  DRAKE_ASSERT(qdot_des.size() == robot->number_of_velocities());
+  DRAKE_ASSERT(qdot_des.size() == robot->get_num_velocities());
   if (nq != robot->get_num_velocities()) {
     throw std::runtime_error(
         "this function will need to be rewritten when num_pos != num_vel");
@@ -316,7 +316,7 @@ VectorXd InstantaneousQPController::velocityReference(
 
 drake::eigen_aligned_std_vector<SupportStateElement>
 InstantaneousQPController::loadAvailableSupports(
-    const drake::lcmt_qp_controller_input_new& qp_input) {
+    const drake::lcmt_qp_controller_input& qp_input) {
   // Parse a qp_input LCM message to extract its available supports as a vector
   // of SupportStateElements
   drake::eigen_aligned_std_vector<SupportStateElement> available_supports;
@@ -652,7 +652,7 @@ const QPControllerParams& InstantaneousQPController::FindParams(
 }
 
 int InstantaneousQPController::setupAndSolveQP(
-    const drake::lcmt_qp_controller_input_new& qp_input,
+    const drake::lcmt_qp_controller_input& qp_input,
     const DrakeRobotState& robot_state,
     const Ref<const Matrix<bool, Dynamic, 1>>& contact_detected,
     const drake::eigen_aligned_std_map<Side, ForceTorqueMeasurement>&

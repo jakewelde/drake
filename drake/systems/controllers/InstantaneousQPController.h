@@ -6,8 +6,7 @@
 #include "QPCommon.h"
 #include "drake/common/eigen_stl_types.h"
 #include "drake/solvers/gurobi_qp.h"
-#include "lcmtypes/drake/lcmt_qp_controller_input.hpp"
-#include "lcmtypes/drake/lcmt_qp_controller_input_new.hpp"
+#include "drake/lcmt_qp_controller_input.hpp"
 
 #define INSTQP_USE_FASTQP 1
 #define INSTQP_GUROBI_OUTPUTFLAG 0
@@ -53,7 +52,7 @@ class InstantaneousQPController {
   }
 
   int setupAndSolveQP(
-      const drake::lcmt_qp_controller_input_new& qp_input,
+      const drake::lcmt_qp_controller_input& qp_input,
       const DrakeRobotState& robot_state,
       const Eigen::Ref<const Eigen::Matrix<bool, Eigen::Dynamic, 1>>&
           contact_detected,
@@ -73,8 +72,6 @@ class InstantaneousQPController {
   const QPControllerState& getControllerState() { return controller_state; }
 
   std::unordered_map<std::string, int> body_or_frame_name_to_id;
-  std::unique_ptr<RigidBodyTree> robot;
-
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
  private:
