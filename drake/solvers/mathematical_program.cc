@@ -582,9 +582,11 @@ SolutionResult MathematicalProgram::Solve() {
     // TODO(hongkai.dai@tri.global): based on my limited experience, Mosek is
     // faster than Gurobi for convex optimization problem. But we should run
     // a more thorough comparison.
+    printf("SOLVING WITH MOSEK\n");
     return mosek_solver_->Solve(*this);
   } else if (is_satisfied(required_capabilities_, kGurobiCapabilities) &&
              gurobi_solver_->available()) {
+    printf("SOLVING WITH GUROBI\n");
     return gurobi_solver_->Solve(*this);
   } else if (is_satisfied(required_capabilities_, kMobyLcpCapabilities) &&
              moby_lcp_solver_->available()) {

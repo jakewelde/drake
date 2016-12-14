@@ -451,7 +451,32 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   GRBenv* env = nullptr;
   GRBloadenv(&env, nullptr);
   // Corresponds to no console or file logging.
-  GRBsetintparam(env, GRB_INT_PAR_OUTPUTFLAG, 0);
+  int error = 0;
+  GRBsetintparam(env, GRB_INT_PAR_OUTPUTFLAG, 0);  
+  if (!error) {
+    for (const auto it : prog.GetSolverOptionsDouble("GUROBI")) {
+      error = GRBsetdblparam(env, it.first.c_str(), it.second);
+      if (error) {
+        continue;
+      }
+    }
+  }
+  if (!error) {
+    for (const auto it : prog.GetSolverOptionsInt("GUROBI")) {
+      error = GRBsetintparam(env, it.first.c_str(), it.second);
+      if (error) {
+        continue;
+      }
+    }
+  }  
+  if (!error) {
+    for (const auto it : prog.GetSolverOptionsStr("GUROBI")) {
+      error = GRBsetstrparam(env, it.first.c_str(), it.second.c_str());
+      if (error) {
+        continue;
+      }
+    }
+  }
 
   DRAKE_ASSERT(prog.generic_costs().empty());
   DRAKE_ASSERT(prog.generic_constraints().empty());
@@ -529,7 +554,6 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   GRBnewmodel(env, &model, "gurobi_model", num_gurobi_vars, nullptr, &xlow[0],
               &xupp[0], gurobi_var_type.data(), nullptr);
 
-  int error = 0;
   // TODO(naveenoid) : This needs access externally.
   double sparseness_threshold = 1e-14;
   error = AddCosts(model, prog, sparseness_threshold);
@@ -588,12 +612,18 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     int optimstatus = 0;
     GRBgetintattr(model, GRB_INT_ATTR_STATUS, &optimstatus);
 
-    if (optimstatus != GRB_OPTIMAL && optimstatus != GRB_SUBOPTIMAL) {
+    if (optimstatus != GRB_OPTIMAL && optimstatus != GRB_SUBOPTIMAL &&
+        optimstatus != GRB_ITERATION_LIMIT && optimstatus != GRB_NODE_LIMIT &&
+        optimstatus != GRB_TIME_LIMIT && optimstatus != GRB_SOLUTION_LIMIT) {
       if (optimstatus == GRB_INF_OR_UNBD) {
         result = SolutionResult::kInfeasibleConstraints;
       }
     } else {
-      result = SolutionResult::kSolutionFound;
+      if (optimstatus == GRB_OPTIMAL)
+        result = SolutionResult::kSolutionFound;
+      else
+        result = SolutionResult::kSuboptimalSolutionFound;
+
       int num_total_variables = is_new_variable.size();
       // Gurobi has solved not only for the decision variables in
       // MathematicalProgram prog, but also for any extra decision variables
@@ -618,6 +648,9 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
         }
       }
       prog.SetDecisionVariableValues(prog_sol_vector);
+      Eigen::VectorXd sol_vector = Eigen::VectorXd::Zero(num_vars);
+      GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_vars, sol_vector.data());
+      prog.SetDecisionVariableValues(sol_vector);
     }
   }
 

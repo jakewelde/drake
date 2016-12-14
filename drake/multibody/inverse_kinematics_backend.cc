@@ -52,6 +52,9 @@ int GetIKSolverInfo(const MathematicalProgram& prog, SolutionResult result) {
 
   // Make a SNOPT-like return code out of the generic result.
   switch (result) {
+    case SolutionResult::kSuboptimalSolutionFound: {
+      return 1;
+    }
     case SolutionResult::kSolutionFound: {
       return 1;
     }

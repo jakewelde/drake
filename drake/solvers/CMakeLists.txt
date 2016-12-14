@@ -87,6 +87,7 @@ drake_install_headers(
   decision_variable.h
   rotation_constraint.h
   system_identification.h
+  ${private_headers}
   )
 drake_install_libraries(drakeOptimization)
 drake_install_pkg_config_file(drake-optimization
