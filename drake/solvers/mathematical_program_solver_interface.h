@@ -7,6 +7,7 @@ namespace solvers {
 class MathematicalProgram;
 
 enum SolutionResult {
+  kSuboptimalSolutionFound = 1,
   kSolutionFound = 0,
   kInvalidInput = -1,
   kInfeasibleConstraints = -2,
