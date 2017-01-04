@@ -1069,7 +1069,7 @@ ModelInstanceIdTable ParseModel(RigidBodyTree<double>* tree, XMLElement* node,
        collision_filter_group_node =
           collision_filter_group_node->NextSiblingElement(
             "collision_filter_group")) {
-    parseCollisionFilterGroup(model,
+    parseCollisionFilterGroup(tree,
                               collision_filter_group_node,
                               group_names,
                               group_members,
@@ -1079,7 +1079,7 @@ ModelInstanceIdTable ParseModel(RigidBodyTree<double>* tree, XMLElement* node,
   // Applies collision filter groups.
   DrakeCollision::bitmask belongs_to, ignores;
   vector<string>::iterator ignored_group;
-  for (int group = 0; group < group_names.size(); group++)
+  for (size_t group = 0; group < group_names.size(); group++)
   {
     belongs_to = DrakeCollision::NONE_MASK;
     ignores = DrakeCollision::NONE_MASK;
@@ -1094,8 +1094,8 @@ ModelInstanceIdTable ParseModel(RigidBodyTree<double>* tree, XMLElement* node,
     }
     for (auto link : group_members[group])
     {
-      model->findLink(link)->addToCollisionFilterGroup(belongs_to);
-      model->findLink(link)->ignoreCollisionFilterGroup(ignores);
+      tree->findLink(link)->addToCollisionFilterGroup(belongs_to);
+      tree->findLink(link)->ignoreCollisionFilterGroup(ignores);
     }
   }
 
