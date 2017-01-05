@@ -4,7 +4,6 @@
 #include <string>
 
 #include <Eigen/Dense>
-#include "drake/thirdParty/bsd/spruce/include/spruce.hh"
 
 #include "drake/multibody/pose_map.h"
 #include "drake/thirdParty/zlib/tinyxml2/tinyxml2.h"
