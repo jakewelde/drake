@@ -2,7 +2,7 @@
 # This is a Bazel repository_rule for the Gurobi solver.  See
 # https://www.bazel.io/versions/master/docs/skylark/repository_rules.html
 
-# GUROBI_PATH should be the linux64 directory in the Gurobi 6.05 release.
+# GUROBI_PATH should be the linux64 directory in the Gurobi 7.01 release.
 # TODO(david-german-tri): Add support for OS X.
 def _gurobi_impl(repository_ctx):
     # TODO(jwnimmer-tri) Once bazelbuild/bazel#1595 is fixed, expose our
@@ -21,8 +21,8 @@ def _gurobi_impl(repository_ctx):
         "gurobi.bzl: The saved value of " + warning_detail + "; " +
         "export GUROBI_PATH to the correct value and then do 'bazel clean'.")
 
-    # In the Gurobi package, libgurobi60.so is just a symlink to
-    # libgurobi.so.6.0.5. However, if you use libgurobi.so.6.0.5 in srcs,
+    # In the Gurobi package, libgurobi70.so is just a symlink to
+    # libgurobi.so.7.0.1. However, if you use libgurobi.so.7.0.1 in srcs,
     # executables that link this library will be unable to find it at runtime
     # in the Bazel sandbox, because the NEEDED statements in the executable
     # will not square with the RPATH statements. I don't really know why this
@@ -34,7 +34,7 @@ def _gurobi_impl(repository_ctx):
     ])
     print("{warning}") if not hdrs else cc_library(
         name = "lib",
-        srcs = ["gurobi-distro/lib/libgurobi60.so"],
+        srcs = ["gurobi-distro/lib/libgurobi70.so"],
         hdrs = hdrs,
         includes = ["gurobi-distro/include"],
         linkstatic = 1,
