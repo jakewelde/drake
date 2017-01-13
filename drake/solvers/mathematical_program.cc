@@ -539,27 +539,29 @@ MathematicalProgram::VarType MathematicalProgram::DecisionVariableType(
   return decision_variable_type_[FindDecisionVariableIndex(var)];
 }
 
-double MathematicalProgram::GetSolution(const symbolic::Variable& var) const {
-  return x_values_[FindDecisionVariableIndex(var)];
+double MathematicalProgram::GetSolution(const symbolic::Variable& var, const int solNum) const {
+  return x_values_[solNum][FindDecisionVariableIndex(var)];
 }
 
 void MathematicalProgram::SetDecisionVariableValues(
-    const Eigen::Ref<const Eigen::VectorXd>& values) {
-  SetDecisionVariableValues(decision_variables_, values);
+    const Eigen::Ref<const Eigen::VectorXd>& values, const int solNum) {
+  SetDecisionVariableValues(decision_variables_, values, solNum);
 }
 
 void MathematicalProgram::SetDecisionVariableValues(
     const Eigen::Ref<const VectorXDecisionVariable>& variables,
-    const Eigen::Ref<const Eigen::VectorXd>& values) {
+    const Eigen::Ref<const Eigen::VectorXd>& values, const int solNum) {
   DRAKE_ASSERT(values.rows() == variables.rows());
+  DRAKE_ASSERT(solNum < x_values_.size());
   for (int i = 0; i < values.rows(); ++i) {
-    x_values_[FindDecisionVariableIndex(variables(i))] = values(i);
+    x_values_[solNum][FindDecisionVariableIndex(variables(i))] = values(i);
   }
 }
 
 void MathematicalProgram::SetDecisionVariableValue(
-    const symbolic::Variable& var, double value) {
-  x_values_[FindDecisionVariableIndex(var)] = value;
+    const symbolic::Variable& var, double value, const int solNum) {
+  DRAKE_ASSERT(solNum < x_values_.size());
+  x_values_[solNum][FindDecisionVariableIndex(var)] = value;
 }
 
 SolutionResult MathematicalProgram::Solve() {

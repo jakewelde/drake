@@ -1910,7 +1910,8 @@ class MathematicalProgram {
    * @param values The values set to all the decision variables.
    */
   void SetDecisionVariableValues(
-      const Eigen::Ref<const Eigen::VectorXd>& values);
+      const Eigen::Ref<const Eigen::VectorXd>& values,
+      const int solNum=0);
 
   /**
    * Sets the value of some decision variables, such that the value of
@@ -1920,14 +1921,15 @@ class MathematicalProgram {
    */
   void SetDecisionVariableValues(
       const Eigen::Ref<const VectorXDecisionVariable>& variables,
-      const Eigen::Ref<const Eigen::VectorXd>& values);
+      const Eigen::Ref<const Eigen::VectorXd>& values,
+      const int solNum=0);
 
   /**
    * Sets the value of a single decision variable in the optimization program.
    * @param var A decision variable in the program.
    * @param value The value of that decision variable.
    */
-  void SetDecisionVariableValue(const symbolic::Variable& var, double value);
+  void SetDecisionVariableValue(const symbolic::Variable& var, double value, const int solNum=0);
 
   /**
    * Set an option for a particular solver.  This interface does not
@@ -2161,7 +2163,7 @@ class MathematicalProgram {
    */
   template <typename Derived>
   Eigen::Matrix<double, Derived::RowsAtCompileTime, Derived::ColsAtCompileTime>
-  GetSolution(const Eigen::MatrixBase<Derived>& var) const {
+  GetSolution(const Eigen::MatrixBase<Derived>& var, const int solNum = 0) const {
     static_assert(
         std::is_same<typename Derived::Scalar, symbolic::Variable>::value,
         "The input should be an Eigen matrix of symbolic::Variable object.");
@@ -2172,7 +2174,7 @@ class MathematicalProgram {
       for (int j = 0; j < var.cols(); ++j) {
         auto it = decision_variable_index_.find(var(i, j).get_id());
         DRAKE_ASSERT(it != decision_variable_index_.end());
-        value(i, j) = x_values_[it->second];
+        value(i, j) = x_values_[solNum][it->second];
       }
     }
     return value;
@@ -2181,7 +2183,7 @@ class MathematicalProgram {
   /**
    * Gets the value of a single decision variable.
    */
-  double GetSolution(const symbolic::Variable& var) const;
+  double GetSolution(const symbolic::Variable& var, const int solNum = 0) const;
 
   /**
    * Evaluate the constraint in the Binding at the solution value.
@@ -2242,7 +2244,7 @@ class MathematicalProgram {
 
   size_t num_vars_;
   Eigen::VectorXd x_initial_guess_;
-  std::vector<double> x_values_;
+  std::vector<std::vector<double>> x_values_;
   std::shared_ptr<SolverData> solver_data_;
   std::string solver_name_;
   int solver_result_;
@@ -2287,7 +2289,11 @@ class MathematicalProgram {
     DRAKE_ASSERT(static_cast<int>(names.size()) == num_new_vars);
     decision_variables_.conservativeResize(num_vars_ + num_new_vars,
                                            Eigen::NoChange);
-    x_values_.resize(num_vars_ + num_new_vars, NAN);
+    if (x_values_.size() == 0)
+      x_values_.resize(1);
+    for (auto iter = x_values_.begin(); iter != x_values_.end(); iter++){
+      iter->resize(num_vars_ + num_new_vars, NAN);
+    }
     decision_variable_type_.resize(num_vars_ + num_new_vars);
     int row_index = 0;
     int col_index = 0;

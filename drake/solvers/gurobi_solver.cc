@@ -457,6 +457,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     for (const auto it : prog.GetSolverOptionsDouble("GUROBI")) {
       error = GRBsetdblparam(env, it.first.c_str(), it.second);
       if (error) {
+        printf("Error setting double param %s to %f\n", it.first.c_str(), it.second);
         continue;
       }
     }
@@ -465,6 +466,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     for (const auto it : prog.GetSolverOptionsInt("GUROBI")) {
       error = GRBsetintparam(env, it.first.c_str(), it.second);
       if (error) {
+        printf("Error setting int param %s to %d\n", it.first.c_str(), it.second);
         continue;
       }
     }
@@ -473,6 +475,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     for (const auto it : prog.GetSolverOptionsStr("GUROBI")) {
       error = GRBsetstrparam(env, it.first.c_str(), it.second.c_str());
       if (error) {
+        printf("Error setting string param %s to %s\n", it.first.c_str(), it.second.c_str());
         continue;
       }
     }
@@ -582,6 +585,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     for (const auto it : prog.GetSolverOptionsDouble("GUROBI")) {
       error = GRBsetdblparam(env, it.first.c_str(), it.second);
       if (error) {
+        printf("Error setting double param %s to %f\n", it.first.c_str(), it.second);
         continue;
       }
     }
@@ -590,6 +594,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     for (const auto it : prog.GetSolverOptionsInt("GUROBI")) {
       error = GRBsetintparam(env, it.first.c_str(), it.second);
       if (error) {
+        printf("Error setting int param %s to %d\n", it.first.c_str(), it.second);
         continue;
       }
     }
@@ -607,6 +612,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   // message.
   if (error) {
     // TODO(naveenoid) : log error message using GRBgeterrormsg(env).
+    printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
     result = SolutionResult::kInvalidInput;
   } else {
     int optimstatus = 0;
@@ -636,21 +642,25 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       // GurobiSolver.
       // prog_sol_vector only includes the original variables in
       // MathematicalProgram prog.
-      std::vector<double> solver_sol_vector(num_total_variables);
-      GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_total_variables,
-                         solver_sol_vector.data());
-      Eigen::VectorXd prog_sol_vector(num_prog_vars);
-      int prog_var_count = 0;
-      for (int i = 0; i < num_total_variables; ++i) {
-        if (!is_new_variable[i]) {
-          prog_sol_vector(prog_var_count) = solver_sol_vector[i];
-          ++prog_var_count;
+
+      int n_solutions;
+      GRBgetintattr(model, "PoolSolutions", &n_solutions);
+
+      for (int i=0; i<n_solutions; i++){
+        std::vector<double> solver_sol_vector(num_total_variables);
+        GRBsetintparam(env, "SolutionNumber", i);
+        GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_total_variables,
+                           solver_sol_vector.data());
+        Eigen::VectorXd prog_sol_vector(num_prog_vars);
+        int prog_var_count = 0;
+        for (int i = 0; i < num_total_variables; ++i) {
+          if (!is_new_variable[i]) {
+            prog_sol_vector(prog_var_count) = solver_sol_vector[i];
+            ++prog_var_count;
+          }
         }
+        prog.SetDecisionVariableValues(prog_sol_vector, i);
       }
-      prog.SetDecisionVariableValues(prog_sol_vector);
-      Eigen::VectorXd sol_vector = Eigen::VectorXd::Zero(num_vars);
-      GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_vars, sol_vector.data());
-      prog.SetDecisionVariableValues(sol_vector);
     }
   }
 
