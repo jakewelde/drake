@@ -1932,6 +1932,19 @@ class MathematicalProgram {
   void SetDecisionVariableValue(const symbolic::Variable& var, double value, const int solNum=0);
 
   /**
+   * Resizes the solution storage vector to
+   * accomodate this many solutions, and no more.
+   */
+  void SetNumberOfSolutions(const size_t number_of_sols){
+    DRAKE_ASSERT(number_of_sols >= 1);
+    size_t old_size = x_values_.size();
+    x_values_.resize(number_of_sols);
+    for (size_t i=old_size; i<number_of_sols; i++){
+      x_values_[i].resize(num_vars_);
+    }
+  }
+
+  /**
    * Set an option for a particular solver.  This interface does not
    * do any verification of solver parameters beyond what an
    * individual solver does for itself.  It does not even verify that
@@ -2167,6 +2180,7 @@ class MathematicalProgram {
     static_assert(
         std::is_same<typename Derived::Scalar, symbolic::Variable>::value,
         "The input should be an Eigen matrix of symbolic::Variable object.");
+    DRAKE_ASSERT(solNum < x_values_.size());
     Eigen::Matrix<double, Derived::RowsAtCompileTime,
                   Derived::ColsAtCompileTime>
         value(var.rows(), var.cols());
@@ -2207,6 +2221,11 @@ class MathematicalProgram {
   /** Getter for the decision variable with index @p i in the program. */
   const symbolic::Variable& decision_variable(int i) const {
     return decision_variables_(i);
+  }
+
+  /** Getter for the number of solutions stored right now */
+  size_t get_num_solutions() const {
+    return x_values_.size();
   }
 
  private:

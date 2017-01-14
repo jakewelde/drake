@@ -540,6 +540,7 @@ MathematicalProgram::VarType MathematicalProgram::DecisionVariableType(
 }
 
 double MathematicalProgram::GetSolution(const symbolic::Variable& var, const size_t solNum) const {
+  DRAKE_ASSERT(solNum < x_values_.size());
   return x_values_[solNum][FindDecisionVariableIndex(var)];
 }
 

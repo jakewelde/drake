@@ -455,6 +455,8 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   // Corresponds to no console or file logging.
   int error = 0;
   GRBsetintparam(env, GRB_INT_PAR_OUTPUTFLAG, 0);  
+
+  // Attempt to submit all params to the generic environment
   if (!error) {
     for (const auto it : prog.GetSolverOptionsDouble("GUROBI")) {
       error = GRBsetdblparam(env, it.first.c_str(), it.second);
@@ -583,9 +585,13 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
 
   DRAKE_ASSERT(HasCorrectNumberOfVariables(model, is_new_variable.size()));
 
+  // Request the model's environment (which is *slightly different* for reasons I don't
+  // understand) and resubmit all params to that one.
+  GRBenv *menv = NULL;
+  menv = GRBgetenv(model);
   if (!error) {
     for (const auto it : prog.GetSolverOptionsDouble("GUROBI")) {
-      error = GRBsetdblparam(env, it.first.c_str(), it.second);
+      error = GRBsetdblparam(menv, it.first.c_str(), it.second);
       if (error) {
         printf("Error setting double param %s to %f\n", it.first.c_str(), it.second);
         continue;
@@ -594,9 +600,18 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   }
   if (!error) {
     for (const auto it : prog.GetSolverOptionsInt("GUROBI")) {
-      error = GRBsetintparam(env, it.first.c_str(), it.second);
+      error = GRBsetintparam(menv, it.first.c_str(), it.second);
       if (error) {
         printf("Error setting int param %s to %d\n", it.first.c_str(), it.second);
+        continue;
+      }
+    }
+  }
+  if (!error) {
+    for (const auto it : prog.GetSolverOptionsStr("GUROBI")) {
+      error = GRBsetstrparam(menv, it.first.c_str(), it.second.c_str());
+      if (error) {
+        printf("Error setting string param %s to %s\n", it.first.c_str(), it.second.c_str());
         continue;
       }
     }
@@ -604,6 +619,8 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
 
   if (!error) {
     error = GRBoptimize(model);
+  } else {
+    printf("GUROBI internal error during setup: %s\n", GRBgeterrormsg(env));
   }
 
   SolutionResult result = SolutionResult::kUnknownError;
@@ -645,29 +662,25 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       // prog_sol_vector only includes the original variables in
       // MathematicalProgram prog.
 
+      // Copy over as many solutions as Gurobi stored.
       int n_solutions;
       error = GRBgetintattr(model, "SolCount", &n_solutions);
       if (error){
-        printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
+        printf("GUROBI internal error during solve: %s\n", GRBgeterrormsg(menv));
       } else {
-        printf("Copying over %d solutions\n", n_solutions);
+        prog.SetNumberOfSolutions(n_solutions);
         for (int k=0; k<n_solutions; k++){
           std::vector<double> solver_sol_vector(num_total_variables);
           for (int i=0; i < num_total_variables; i++){
               solver_sol_vector[i] = 0.0;
           }
-          error = GRBsetintparam(env, "SolutionNumber", k);
-          if (error){
-            printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
-          }
-          if (k == 0)
+          error = GRBsetintparam(menv, "SolutionNumber", k);
+          if (k == 0){
             error = GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_total_variables,
-			     solver_sol_vector.data());
-          else
-	    error = GRBgetdblattrarray(model, GRB_DBL_ATTR_XN, 0, num_total_variables,
-                             solver_sol_vector.data());
-          if (error){
-            printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
+			                                 solver_sol_vector.data());
+          } else {
+	          error = GRBgetdblattrarray(model, GRB_DBL_ATTR_XN, 0, num_total_variables,
+                                       solver_sol_vector.data());
           }
           Eigen::VectorXd prog_sol_vector(num_prog_vars);
           int prog_var_count = 0;
@@ -677,12 +690,12 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
               ++prog_var_count;
             }
           }
-          int actual_sol_num = -1;
-          GRBgetintparam(env, "SolutionNumber", &actual_sol_num);
-          double obj_here = -99.0;
-          GRBgetdblattr(model, "PoolObjVal", &obj_here);
-          std::cout << "Sol " << actual_sol_num << "(" << k << ") : obj " << obj_here << ", " << prog_sol_vector.transpose() << std::endl;
+          //double obj_here = -99.0;
+          //GRBgetdblattr(model, "PoolObjVal", &obj_here);
           prog.SetDecisionVariableValues(prog_sol_vector, k);
+        }
+        if (error){
+          printf("GUROBI internal error during solution extraction: %s\n", GRBgeterrormsg(menv));
         }
       }
     }
