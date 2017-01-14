@@ -653,11 +653,18 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
         printf("Copying over %d solutions\n", n_solutions);
         for (int k=0; k<n_solutions; k++){
           std::vector<double> solver_sol_vector(num_total_variables);
+          for (int i=0; i < num_total_variables; i++){
+              solver_sol_vector[i] = 0.0;
+          }
           error = GRBsetintparam(env, "SolutionNumber", k);
           if (error){
             printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
           }
-          error = GRBgetdblattrarray(model, GRB_DBL_ATTR_XN, 0, num_total_variables,
+          if (k == 0)
+            error = GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_total_variables,
+			     solver_sol_vector.data());
+          else
+	    error = GRBgetdblattrarray(model, GRB_DBL_ATTR_XN, 0, num_total_variables,
                              solver_sol_vector.data());
           if (error){
             printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
