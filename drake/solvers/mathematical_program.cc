@@ -539,7 +539,7 @@ MathematicalProgram::VarType MathematicalProgram::DecisionVariableType(
   return decision_variable_type_[FindDecisionVariableIndex(var)];
 }
 
-double MathematicalProgram::GetSolution(const symbolic::Variable& var, const int solNum) const {
+double MathematicalProgram::GetSolution(const symbolic::Variable& var, const size_t solNum) const {
   return x_values_[solNum][FindDecisionVariableIndex(var)];
 }
 

@@ -2163,7 +2163,7 @@ class MathematicalProgram {
    */
   template <typename Derived>
   Eigen::Matrix<double, Derived::RowsAtCompileTime, Derived::ColsAtCompileTime>
-  GetSolution(const Eigen::MatrixBase<Derived>& var, const int solNum = 0) const {
+  GetSolution(const Eigen::MatrixBase<Derived>& var, const size_t solNum = 0) const {
     static_assert(
         std::is_same<typename Derived::Scalar, symbolic::Variable>::value,
         "The input should be an Eigen matrix of symbolic::Variable object.");
@@ -2183,7 +2183,7 @@ class MathematicalProgram {
   /**
    * Gets the value of a single decision variable.
    */
-  double GetSolution(const symbolic::Variable& var, const int solNum = 0) const;
+  double GetSolution(const symbolic::Variable& var, const size_t solNum = 0) const;
 
   /**
    * Evaluate the constraint in the Binding at the solution value.

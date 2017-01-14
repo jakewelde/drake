@@ -9,7 +9,9 @@
 #include <Eigen/SparseCore>
 
 // NOLINTNEXTLINE(build/include) False positive due to weird include style.
-#include "gurobi_c++.h"
+extern "C" {
+#include "gurobi_c.h"
+}
 
 #include "drake/common/drake_assert.h"
 #include "drake/math/eigen_sparse_triplet.h"
@@ -636,7 +638,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       // that this GurobiSolver injected to craft certain constraints, such as
       // Lorentz cones.  We therefore filter out the optimized values for
       // injected variables, and report back values for the MathematicalProgram
-      // variables only.
+      // variables only.o
       // solver_sol_vector includes the potentially newly added variables, i.e.,
       // variables not in MathematicalProgram prog, but added to Gurobi by
       // GurobiSolver.
@@ -644,22 +646,37 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       // MathematicalProgram prog.
 
       int n_solutions;
-      GRBgetintattr(model, "PoolSolutions", &n_solutions);
-
-      for (int i=0; i<n_solutions; i++){
-        std::vector<double> solver_sol_vector(num_total_variables);
-        GRBsetintparam(env, "SolutionNumber", i);
-        GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_total_variables,
-                           solver_sol_vector.data());
-        Eigen::VectorXd prog_sol_vector(num_prog_vars);
-        int prog_var_count = 0;
-        for (int i = 0; i < num_total_variables; ++i) {
-          if (!is_new_variable[i]) {
-            prog_sol_vector(prog_var_count) = solver_sol_vector[i];
-            ++prog_var_count;
+      error = GRBgetintattr(model, "SolCount", &n_solutions);
+      if (error){
+        printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
+      } else {
+        printf("Copying over %d solutions\n", n_solutions);
+        for (int k=0; k<n_solutions; k++){
+          std::vector<double> solver_sol_vector(num_total_variables);
+          error = GRBsetintparam(env, "SolutionNumber", k);
+          if (error){
+            printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
           }
+          error = GRBgetdblattrarray(model, GRB_DBL_ATTR_XN, 0, num_total_variables,
+                             solver_sol_vector.data());
+          if (error){
+            printf("GUROBI Internal Error: %s\n", GRBgeterrormsg(env));
+          }
+          Eigen::VectorXd prog_sol_vector(num_prog_vars);
+          int prog_var_count = 0;
+          for (int i = 0; i < num_total_variables; ++i) {
+            if (!is_new_variable[i]) {
+              prog_sol_vector(prog_var_count) = solver_sol_vector[i];
+              ++prog_var_count;
+            }
+          }
+          int actual_sol_num = -1;
+          GRBgetintparam(env, "SolutionNumber", &actual_sol_num);
+          double obj_here = -99.0;
+          GRBgetdblattr(model, "PoolObjVal", &obj_here);
+          std::cout << "Sol " << actual_sol_num << "(" << k << ") : obj " << obj_here << ", " << prog_sol_vector.transpose() << std::endl;
+          prog.SetDecisionVariableValues(prog_sol_vector, k);
         }
-        prog.SetDecisionVariableValues(prog_sol_vector, i);
       }
     }
   }
