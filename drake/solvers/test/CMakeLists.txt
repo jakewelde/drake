@@ -22,6 +22,13 @@ target_link_libraries(system_identification_test drakeOptimization)
 drake_add_cc_test(constraint_test)
 target_link_libraries(constraint_test drakeOptimization drakeCommon)
 
+drake_add_cc_test(gurobi_test)
+target_link_libraries(gurobi_test drakeOptimization drakeCommon)
+
+#add_executable(poolsearch_c poolsearch_c.cc)
+#target_link_libraries(poolsearch_c drakeOptimization gurobi)
+#set_target_properties(poolsearch_c PROPERTIES LINK_FLAGS -m64)
+
 if(dreal_FOUND)
   drake_add_cc_test(dreal_solver_test)
   target_link_libraries(dreal_solver_test drakeOptimization)
