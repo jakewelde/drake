@@ -118,5 +118,28 @@ void AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     int num_binary_vars_per_half_axis = 2,
     RollPitchYawLimits limits = kNoLimits);
 
+/// Adds 4 continuous variables constrained to represent a quaternion,
+/// and 10 more representing each bilinear combination of quaternion
+/// variables. The rotation matrix R is constrained to be equal to the
+/// quaternion through linear combinations of the bilinear variables. The
+/// bilinear combination variables are  through a set of bilinear
+/// constraints. A rotation matrix can be assembled as a linear combination
+/// of bilinear combinations of quaternion elements, so the continuous
+/// variables representing each bilinear quaternion are constrained
+/// via piecewise McCormick envelopes to be approximately bilinear
+/// combinations of their component variables.
+/// Each McCormick envelope adds num_bins_on_x_axis*num_bins_on_y_axis
+/// new binary variables and num_bins_on_x_axis*num_bins_on_y_axis
+/// new continuous variables, so in total, we add:
+/// 
+///  4 + 10 + 10*(num_bins_on_x_axis)*(num_bins_on_y_axis)*2 continuous
+///  10*(num_bins_on_x_axis)*(num_bins_on_y_axis)*2 binary
+
+void AddRotationMatrixMcCormickEnvelopeQuaternionMilpConstraints(
+  MathematicalProgram*prog,
+  const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
+  int num_bins_on_x_axis = 2,
+  int num_bins_on_y_axis = 2);
+
 }  // namespace solvers
 }  // namespace drake

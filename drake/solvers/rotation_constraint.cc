@@ -730,5 +730,269 @@ void AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   }
 }
 
+
+// TODO: replace with reshape?
+template <typename Derived, int rows, int cols>
+Eigen::Matrix<Derived, -1, -1> flatten_MxN( const Eigen::Matrix<Derived, rows, cols> & x ){
+  Eigen::Matrix<Derived, -1, -1> ret(x.rows()*x.cols(), 1);
+  for (int i=0; i<x.rows(); i++){ // for each row, paste that row, in order,
+                                  // as elems in the new column vector
+    ret.block(i*x.cols(), 0, x.cols(), 1) = x.block(i, 0, 1, x.cols()).transpose();
+  }
+  return ret;
+}
+template <typename Derived, int rows, int cols>
+Eigen::Matrix<Derived, -1, -1> flatten_MxN( const Eigen::Ref<const Eigen::Matrix<Derived, rows, cols>> & x ){
+  Eigen::Matrix<Derived, -1, -1> ret(x.rows()*x.cols(), 1);
+  for (int i=0; i<x.rows(); i++){ // for each row, paste that row, in order,
+                                  // as elems in the new column vector
+    ret.block(i*x.cols(), 0, x.cols(), 1) = x.block(i, 0, 1, x.cols()).transpose();
+  }
+  return ret;
+}
+
+void add_McCormick_envelope(MathematicalProgram& prog, 
+                              drake::symbolic::Variable& w,
+                              drake::symbolic::Variable& x, 
+                              drake::symbolic::Variable& y, 
+                              std::string corename,
+                              double xL, 
+                              double xH, 
+                              double yL, 
+                              double yH, 
+                              int M_x,
+                              int M_y){
+  MatrixXDecisionVariable x_mat(1,1); x_mat(0,0) = x;
+  MatrixXDecisionVariable y_mat(1,1); y_mat(0,0) = y;
+  MatrixXDecisionVariable w_mat(1,1); w_mat(0,0) = w;
+
+  // Add binary variables for the region we are in
+  const double kStepSizeX =  (xH - xL) / (double)M_x;
+  const double kStepSizeY =  (yH - yL) / (double)M_y;
+
+  auto z_uv = prog.NewBinaryVariables(M_x, M_y, (corename + "_z").c_str());
+  // and constrain that we can be in one at a time
+  prog.AddLinearEqualityConstraint(Eigen::MatrixXd::Ones(1, M_x*M_y), Eigen::MatrixXd::Ones(1, 1), flatten_MxN(z_uv));
+
+  // Create indicator variables xhat and yhat for each subsection
+  auto x_hat = prog.NewContinuousVariables(M_x, M_y, (corename + std::string("_xhat")).c_str());
+  auto y_hat = prog.NewContinuousVariables(M_x, M_y, (corename + std::string("_yhat")).c_str());
+  // They must sum to their respective variable...
+  Eigen::MatrixXd A_sumconstr = Eigen::MatrixXd::Ones(1, 1+M_x*M_y);
+  A_sumconstr(0, 0) = -1;
+  prog.AddLinearEqualityConstraint(A_sumconstr, Eigen::MatrixXd::Zero(1, 1), {x_mat, flatten_MxN(x_hat)});
+  prog.AddLinearEqualityConstraint(A_sumconstr, Eigen::MatrixXd::Zero(1, 1), {y_mat, flatten_MxN(y_hat)});
+  // And respect the range of the region they represent -- which may force to zero if the region isn't active
+  // Implemented as a bunch of upper and lower bounds
+  Eigen::MatrixXd A_region_bounds_xhat = Eigen::MatrixXd::Zero(M_x*M_y*2, M_x*M_y + M_x*M_y);
+  Eigen::MatrixXd A_region_bounds_yhat = Eigen::MatrixXd::Zero(M_x*M_y*2, M_x*M_y + M_x*M_y);
+  Eigen::MatrixXd lb_zero = Eigen::MatrixXd::Zero(M_x*M_y*2, 1);
+  Eigen::MatrixXd ub_inf =  Eigen::MatrixXd::Constant(M_x*M_y*2, 1, std::numeric_limits<double>::infinity());
+  int k=0;
+  for (int u=0; u<M_x; u++){
+    for (int v=0; v<M_y; v++){
+      double xL_uv = xL + u*kStepSizeX;
+      double xH_uv = xL + (u+1)*kStepSizeX;
+      double yL_uv = yL + v*kStepSizeY;
+      double yH_uv = yL + (v+1)*kStepSizeY;
+      // z(u,v) * xL(u,v) <= x_hat(u,v) <= z(u,v) * xH(u,v)
+      A_region_bounds_xhat(2*k, k) = 1.0; // xhat - z(u,v) * xL(u,v) >= 0
+      A_region_bounds_xhat(2*k, M_x*M_y+k) = -xL_uv;
+      A_region_bounds_yhat(2*k, k) = 1.0; // yhat - z(u,v) * yL(u,v) >= 0
+      A_region_bounds_yhat(2*k, M_x*M_y+k) = -yL_uv;
+
+      A_region_bounds_xhat(2*k+1, k) = -1.0; // z(u,v) * xH(u,v) - xhat >= 0
+      A_region_bounds_xhat(2*k+1, M_x*M_y+k) = xH_uv;
+      A_region_bounds_yhat(2*k+1, k) = -1.0; // z(u,v) * yH(u,v) - yhat >= 0
+      A_region_bounds_yhat(2*k+1, M_x*M_y+k) = yH_uv;
+      k++;
+    }
+  }
+  prog.AddLinearConstraint(A_region_bounds_xhat, lb_zero, ub_inf, {flatten_MxN(x_hat), flatten_MxN(z_uv)});
+  prog.AddLinearConstraint(A_region_bounds_yhat, lb_zero, ub_inf, {flatten_MxN(y_hat), flatten_MxN(z_uv)});
+
+  // And finally, constrain w by the four appropriate surfaces
+  // Constraints w, xhats, yhats, z_uvs
+  Eigen::MatrixXd A_w_constraints = Eigen::MatrixXd::Zero(4, 1 + M_x*M_y + M_x*M_y + M_x*M_y);
+  const int xhat_s = 1;
+  const int yhat_s = xhat_s + M_x*M_y;
+  const int zuv_s = yhat_s + M_x*M_y;
+  lb_zero = Eigen::MatrixXd::Zero(4, 1);
+  ub_inf = Eigen::MatrixXd::Constant(4, 1, std::numeric_limits<double>::infinity());
+  k=0;
+  for (int u=0; u<M_x; u++){
+    for (int v=0; v<M_y; v++){
+      double xL_uv = xL + u*kStepSizeX;
+      double xH_uv = xL + (u+1)*kStepSizeX;
+      double yL_uv = yL + v*kStepSizeY;
+      double yH_uv = yL + (v+1)*kStepSizeY;
+      // w >= sum_{uv} xL(u,v) * y_hat(u,v) + x_hat(u,v) * yL(u,v) - xL(u,v)*yL(u,v)*z(u,v)
+      A_w_constraints(0, 0) = 1.0;
+      A_w_constraints(0, xhat_s + k) = - yL_uv;
+      A_w_constraints(0, yhat_s + k) = - xL_uv;
+      //lb_zero(0) = -xL_uv * yL_uv;
+      A_w_constraints(0, zuv_s  + k) = xL_uv * yL_uv;
+
+      // w >= sum_{uv} xH(u,v) * y_hat(u,v) + x_hat(u,v) * yH(u,v) - xH(u,v)*yH(u,v)*z(u,v)
+      A_w_constraints(1, 0) = 1.0;
+      A_w_constraints(1, xhat_s + k) = - yH_uv;
+      A_w_constraints(1, yhat_s + k) = - xH_uv;
+      //lb_zero(1) = -xH_uv * yH_uv;
+      A_w_constraints(1, zuv_s  + k) = xH_uv * yH_uv;
+
+      // w <= sum_{uv} xH(u,v) * y_hat(u,v) + x_hat(u,v) * yL(u,v) - xH(u,v)*yL(u,v)*z(u,v)
+      A_w_constraints(2, 0) = -1.0;
+      A_w_constraints(2, xhat_s + k) = yL_uv;
+      A_w_constraints(2, yhat_s + k) = xH_uv;
+      //lb_zero(2) = xH_uv * yL_uv;
+      A_w_constraints(2, zuv_s  + k) = -xH_uv * yL_uv;
+
+      // w <= sum_{uv} xH(u,v) * y_hat(u,v) + x_hat(u,v) * yL(u,v) - xH(u,v)*yL(u,v)*z(u,v)
+      A_w_constraints(3, 0) = -1.0;
+      A_w_constraints(3, xhat_s + k) = yH_uv;
+      A_w_constraints(3, yhat_s + k) = xL_uv;
+      //lb_zero(3) = xL_uv * yH_uv;
+      A_w_constraints(3, zuv_s  + k) = -xL_uv * yH_uv;
+
+      k++;
+    }
+  }
+  prog.AddLinearConstraint(A_w_constraints, lb_zero, ub_inf, {w_mat, flatten_MxN(x_hat), flatten_MxN(y_hat), flatten_MxN(z_uv)});
+}
+
+void AddRotationMatrixMcCormickEnvelopeQuaternionMilpConstraints(
+  MathematicalProgram*prog,
+  const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
+  int num_bins_on_x_axis,
+  int num_bins_on_y_axis){
+  DRAKE_DEMAND(num_bins_on_x_axis >= 1);
+  DRAKE_DEMAND(num_bins_on_y_axis >= 1);
+
+  // Add core quaternion variables, ordered w x y z.
+  auto Q = prog->NewContinuousVariables(4, 1, "q");
+  prog->AddBoundingBoxConstraint(-Eigen::VectorXd::Ones(4), Eigen::VectorXd::Ones(4), Q);
+
+  // Add variables for bilinear quaternion element products.
+  auto B = prog->NewContinuousVariables(10, 1, "b");
+  prog->AddBoundingBoxConstraint(-Eigen::VectorXd::Ones(10), Eigen::VectorXd::Ones(10), B);   
+
+  // Constrain elements of rotation matrix by bilinear quaternion values.
+  // This constrains the 9 elements of the rotation matrix against the 
+  // 10 bilinear terms in various combinations, as dictated by the
+  // conversion of a quaternion to a rotation matrix.
+  // See https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation,
+  // "From a quaternion to an orthogonal matrix"
+
+  Eigen::MatrixXd Aeq(9, 9 + 10);
+  Aeq.setZero();
+  Eigen::MatrixXd beq(9, 1);
+  beq.setZero();
+
+  // Build some utility inds to make writing this cleaner.
+  int k=0;
+  char qnames[5] = "wxyz";
+  const int kNumRotVars = 9;
+  const int kOffww = kNumRotVars + 0;
+  const int kOffwx = kNumRotVars + 1;
+  const int kOffwy = kNumRotVars + 2;
+  const int kOffwz = kNumRotVars + 3;
+  const int kOffxx = kNumRotVars + 4;
+  const int kOffxy = kNumRotVars + 5;
+  const int kOffxz = kNumRotVars + 6;
+  const int kOffyy = kNumRotVars + 7;
+  const int kOffyz = kNumRotVars + 8;
+  const int kOffzz = kNumRotVars + 9;
+
+  // TODO: I know you can do this formulaicaijasafcally...
+  // R00 = w^2 + x^2 - y^2 - z^2
+  Aeq(k, 0) = 1.0;
+  Aeq(k, kOffww) = -1.0;
+  Aeq(k, kOffxx) = -1.0;
+  Aeq(k, kOffyy) = 1.0;
+  Aeq(k, kOffzz) = 1.0;
+  beq(k, 0) = 0.0;
+  k++;
+  // R01 = 2xy + 2wz -> R01 - 2xy - 2wz = 0
+  Aeq(k, 3) = 1.0;
+  Aeq(k, kOffxy) = -2.0;
+  Aeq(k, kOffwz) = -2.0;
+  beq(k, 0) = 0.0;
+  k++;
+  // R02 = 2xz - 2wy -> R02 - 2xz + 2wy = 0
+  Aeq(k, 6) = 1.0;
+  Aeq(k, kOffxz) = -2.0;
+  Aeq(k, kOffwy) = 2.0;
+  beq(k, 0) = 0.0;
+  k++;
+  // R10 = 2xy - 2wz -> R10 - 2xy + 2wz = 0
+  Aeq(k, 1) = 1.0;
+  Aeq(k, kOffxy) = -2;
+  Aeq(k, kOffwz) = 2;
+  beq(k, 0) = 0.0;
+  k++;
+  // R11 = w^2 - x^2 + y^2 - z^2
+  Aeq(k, 4) = 1.0;
+  Aeq(k, kOffww) = -1.0;
+  Aeq(k, kOffxx) = 1.0;
+  Aeq(k, kOffyy) = -1.0;
+  Aeq(k, kOffzz) = 1.0;
+  beq(k, 0) = 0.0;
+  k++;
+  // R12 = 2yz + 2wx -> r12 - 2yz - 2wx = 0
+  Aeq(k, 7) = 1.0;
+  Aeq(k, kOffyz) = -2.0;
+  Aeq(k, kOffwx) = -2.0;
+  beq(k, 0) = 0.0;
+  k++;
+  // R20 = 2xz + 2wy -> r20 - 2xz - 2wy = 0
+  Aeq(k, 2) = 1.0;
+  Aeq(k, kOffxz) = -2.0;
+  Aeq(k, kOffwy) = -2.0;
+  beq(k, 0) = 0.0;
+  k++;
+  // R21 = 2yz - 2wx -> r21 - 2yz + 2wx = 0
+  Aeq(k, 5) = 1.0;
+  Aeq(k, kOffyz) = -2.0;
+  Aeq(k, kOffwx) = 2.0;
+  beq(k, 0) = 0.0;
+  k++;
+  // R22 = w^2 - x^2 - y^2 + z^2
+  Aeq(k, 8) = 1.0;
+  Aeq(k, kOffww) = -1.0;
+  Aeq(k, kOffxx) = 1.0;
+  Aeq(k, kOffyy) = 1.0;
+  Aeq(k, kOffzz) = -1.0;
+  beq(k, 0) = 0.0;
+  k++;
+  prog->AddLinearEqualityConstraint(Aeq, beq, {flatten_MxN(R), B});
+
+  // Constrain xx + yy + zz + ww = 1.
+  prog->AddLinearEqualityConstraint(Eigen::MatrixXd::Ones(1, 4), Eigen::MatrixXd::Ones(1, 1), 
+    {B.block<1,1>(0,0),B.block<1,1>(4,0),B.block<1,1>(7,0),B.block<1,1>(9,0)});
+
+  // Finally, constrain each of the bilinear product pairs with their core quaternion variables.
+  k=0;
+  for (int i=0; i<4; i++){
+    for (int j=i; j<4; j++){
+      // We'll be spawning new variables, so generate a representative name.
+      std::string corename; corename += qnames[i]; corename += qnames[j];
+
+      // Select variable "x" and "y" out of quaternion...
+      auto x = Q(i, 0);
+      auto y = Q(j, 0);
+      // ... and select bilinear product "xy" variable.
+      auto xy = B(k,0);
+
+      add_McCormick_envelope(*prog, xy, x, y, corename,
+                             -1.0, // xL
+                             1.0,  // xH
+                             -1.0, // yL
+                             1.0,  // yH
+                             num_bins_on_x_axis,
+                             num_bins_on_y_axis);
+      k++;
+    }
+  }
+}
 }  // namespace solvers
 }  // namespace drake
