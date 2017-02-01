@@ -9,10 +9,10 @@
 	url = https://github.com/lcm-proj/lcm.git
 [submodule "externals/bot_core_lcmtypes"]
 	path = externals/bot_core_lcmtypes
-	url = https://github.com/mwoehlke-kitware/bot_core_lcmtypes
+	url = https://github.com/openhumanoids/bot_core_lcmtypes
 [submodule "externals/libbot"]
 	path = externals/libbot
-	url = https://github.com/RobotLocomotion/libbot2.git
+	url = https://github.com/gizatt/libbot.git
 [submodule "externals/spotless"]
 	path = externals/spotless
 	url = https://github.com/RobotLocomotion/spotless-pod.git
@@ -30,7 +30,7 @@
 	url = git@github.com:RobotLocomotion/snopt.git
 [submodule "externals/gurobi"]
 	path = externals/gurobi
-	url = https://github.com/RobotLocomotion/gurobi.git
+	url = https://github.com/gizatt/gurobi.git
 [submodule "externals/mosek"]
 	path = externals/mosek
 	url = https://github.com/RobotLocomotion/mosek.git
