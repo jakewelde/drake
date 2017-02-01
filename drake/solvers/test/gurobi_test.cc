@@ -73,8 +73,8 @@ GTEST_TEST(GurobiTest, Knapsack) {
   knapsack_costs << 16, 16,  8,  8, 4, 4, 2, 2, 1, 1;
   knapsack_obj_coeffs << 32, 32, 15, 15, 6, 6, 1, 1, 1, 1;
   double total_budget = 33;
-  prog.AddLinearConstraint(knapsack_costs.transpose(), -std::numeric_limits<double>::infinity(), total_budget, {B_knapsack});
-  prog.AddLinearCost(-1.0*knapsack_obj_coeffs, {B_knapsack});
+  prog.AddLinearConstraint(knapsack_costs.transpose(), -std::numeric_limits<double>::infinity(), total_budget, B_knapsack);
+  prog.AddLinearCost(-1.0*knapsack_obj_coeffs, B_knapsack);
 
   GurobiSolver gurobi_solver;
 
