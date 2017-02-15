@@ -618,9 +618,10 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   }
 
   for (int i=0; i<prog.initial_guess().rows(); i++){
-    if (!error){
+    if (!error && !isnan(prog.initial_guess()(i)) ){
       error = GRBsetdblattrelement(model, "Start", i, prog.initial_guess()(i));
-    } else {
+    }
+    if (error){
       printf("Error setting initial guess at position %d to %f\n", i, prog.initial_guess()(i));
     }
   }
