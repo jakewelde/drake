@@ -15,6 +15,7 @@ set(sources
   ${drake_path_cc}
   drake_throw.cc
   functional_form.cc
+  monomial.cc
   nice_type_name.cc
   polynomial.cc
   symbolic_environment.cc
@@ -38,6 +39,7 @@ set(installed_headers
   double_overloads.h
   drake_assert.h
   drake_compat.h
+  drake_copyable.h
   drake_deprecated.h
   drake_path.h
   drake_throw.h
@@ -50,6 +52,7 @@ set(installed_headers
   functional_form.h
   hash.h
   is_approx_equal_abstol.h
+  monomial.h
   never_destroyed.h
   nice_type_name.h
   number_traits.h
@@ -57,6 +60,7 @@ set(installed_headers
   sorted_vectors_have_intersection.h
   symbolic_environment.h
   symbolic_expression.h
+  symbolic_expression_visitor.h
   symbolic_formula.h
   symbolic_variable.h
   symbolic_variables.h

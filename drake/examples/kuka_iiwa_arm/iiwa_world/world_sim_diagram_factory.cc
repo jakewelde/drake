@@ -14,8 +14,6 @@
 #include "drake/multibody/rigid_body_plant/rigid_body_plant.h"
 #include "drake/multibody/rigid_body_tree.h"
 #include "drake/systems/analysis/simulator.h"
-#include "drake/systems/controllers/gravity_compensator.h"
-#include "drake/systems/controllers/pid_controlled_system.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
@@ -35,12 +33,11 @@ namespace drake {
 using lcm::DrakeLcmInterface;
 using systems::ConstantVectorSource;
 using systems::Context;
-using systems::Demultiplexer;
 using systems::Diagram;
 using systems::DiagramBuilder;
 using systems::DrakeVisualizer;
+using systems::InputPortDescriptor;
 using systems::Multiplexer;
-using systems::PidControlledSystem;
 using systems::RigidBodyPlant;
 using systems::Simulator;
 using systems::System;
@@ -70,12 +67,17 @@ VisualizedPlant<T>::VisualizedPlant(
       rigid_body_plant_->get_rigid_body_tree(), lcm);
 
   // Connects the plant to the publisher for visualization.
-  builder.Connect(rigid_body_plant_->get_output_port(0),
+  builder.Connect(rigid_body_plant_->state_output_port(),
                   viz_publisher_->get_input_port(0));
 
-  // Exposes output and input ports of the Diagram.
-  builder.ExportOutput(rigid_body_plant_->get_output_port(0));
-  builder.ExportInput(rigid_body_plant_->get_input_port(0));
+  // Exports all of the RigidBodyPlant's input and output ports.
+  for (int i = 0; i < rigid_body_plant_->get_num_input_ports(); ++i) {
+    builder.ExportInput(rigid_body_plant_->get_input_port(i));
+  }
+
+  for (int i = 0; i < rigid_body_plant_->get_num_output_ports(); ++i) {
+    builder.ExportOutput(rigid_body_plant_->get_output_port(i));
+  }
 
   drake::log()->debug("Plant and visualizer Diagram built...");
 
@@ -88,22 +90,34 @@ PassiveVisualizedPlant<T>::PassiveVisualizedPlant(
     std::unique_ptr<VisualizedPlant<T>> visualized_plant) {
   // Sets up a builder for the demo.
   DiagramBuilder<T> builder;
-
-  const int num_inputs = visualized_plant->get_input_port(0).size();
   visualized_plant_ = builder.template AddSystem<VisualizedPlant<T>>(
       std::move(visualized_plant));
 
-  // Instantiates a constant source that outputs a vector of zeros.
-  VectorX<double> constant_value(num_inputs);
-  constant_value.setZero();
+  // Fixes constant sources to all inputs.
+  const systems::RigidBodyPlant<T>& plant = visualized_plant_->plant();
 
-  constant_vector_source_ =
-      builder.template AddSystem<systems::ConstantVectorSource<T>>(
-          constant_value);
+  for (int instance_id = RigidBodyTreeConstants::kFirstNonWorldModelInstanceId;
+      instance_id < plant.get_num_model_instances(); ++instance_id) {
+    if (plant.model_instance_has_actuators(instance_id)) {
+      const int input_port_index =
+          plant.model_instance_actuator_command_input_port(instance_id)
+              .get_index();
+      const InputPortDescriptor<T>& input_port =
+          visualized_plant_->get_input_port(input_port_index);
+      const int num_inputs = input_port.size();
+      // Instantiates a constant source that outputs a vector of zeros.
+      VectorX<double> constant_value(num_inputs);
+      constant_value.setZero();
 
-  // Cascades the constant source to the plant and visualizer diagram. This
-  // effectively results in the robot being uncontrolled.
-  builder.Cascade(*constant_vector_source_, *visualized_plant_);
+      // Cascades the constant source to the model instance within the plant and
+      // visualizer diagram. This effectively results in the model instance
+      // being uncontrolled, i.e., passive.
+      systems::ConstantVectorSource<T>* constant_vector_source =
+          builder.template AddSystem<systems::ConstantVectorSource<T>>(
+              constant_value);
+      builder.Connect(constant_vector_source->get_output_port(), input_port);
+    }
+  }
 
   builder.BuildInto(this);
 }
@@ -123,10 +137,12 @@ PositionControlledPlantWithRobot<T>::PositionControlledPlantWithRobot(
       builder.template AddSystem<RigidBodyPlant>(std::move(world_tree));
 
   const auto& robot_input_port =
-      rigid_body_plant_->model_input_port(robot_instance_id);
+      rigid_body_plant_->model_instance_actuator_command_input_port(
+          robot_instance_id);
   const auto& robot_output_port =
-      rigid_body_plant_->model_state_output_port(robot_instance_id);
-  const auto& plant_output_port = rigid_body_plant_->get_output_port(0);
+      rigid_body_plant_->model_instance_state_output_port(robot_instance_id);
+
+  const auto& plant_output_port = rigid_body_plant_->state_output_port();
 
   rigid_body_plant_->set_contact_parameters(
       penetration_stiffness, penetration_damping, friction_coefficient);
@@ -148,10 +164,17 @@ PositionControlledPlantWithRobot<T>::PositionControlledPlantWithRobot(
   Eigen::VectorXd ki = Eigen::VectorXd::Zero(num_robot_actuators);
   Eigen::VectorXd kd = Eigen::VectorXd::Zero(num_robot_actuators);
 
-  SetPositionControlledIIWAGains(kp, ki, kd);
-  auto pid_controller = PidControlledSystem<T>::ConnectController(
-      robot_input_port, robot_output_port, nullptr /* feedback */, kp, ki, kd,
-      &builder);
+  SetPositionControlledIiwaGains(&kp, &ki, &kd);
+
+  controller_ =
+      builder.template AddSystem<systems::PidWithGravityCompensator<T>>(
+          robot_tree, kp, ki, kd);
+
+  // Connect robot (not the entire plant) and controller
+  builder.Connect(robot_output_port,
+                  controller_->get_estimated_state_input_port());
+  builder.Connect(controller_->get_control_output_port(),
+                  robot_input_port);
 
   // Create a multiplexer to handle the fact that we'll be getting
   // the input state for the positions and velocities from different
@@ -174,30 +197,17 @@ PositionControlledPlantWithRobot<T>::PositionControlledPlantWithRobot(
                   input_mux_->get_input_port(1));
 
   builder.Connect(input_mux_->get_output_port(0),
-                  pid_controller.state_input_port);
-
-  gravity_compensator_ =
-      builder.template AddSystem<systems::GravityCompensator<T>>(robot_tree);
+                  controller_->get_desired_state_input_port());
 
   // Creates a plan and wraps it into a source system.
   desired_plan_ =
       builder.template AddSystem<TrajectorySource<double>>(*poly_trajectory_);
-  builder.Connect(desired_plan_->get_output_port(0),
+  builder.Connect(desired_plan_->get_output_port(),
                   input_mux_->get_input_port(0));
 
-  auto rbp_state_demux = builder.template AddSystem<Demultiplexer<T>>(
-      num_robot_positions + num_robot_velocities, num_robot_positions);
-  builder.Connect(robot_output_port, rbp_state_demux->get_input_port(0));
-
-  // Connects the gravity compensator to the output generalized positions
-  // corresponding to the robot.
-  builder.Connect(rbp_state_demux->get_output_port(0),
-                  gravity_compensator_->get_input_port(0));
-  builder.Connect(gravity_compensator_->get_output_port(0),
-                  pid_controller.control_input_port);
-
   // Connects the plant to the publisher for visualization.
-  builder.Connect(plant_output_port, drake_visualizer_->get_input_port(0));
+  builder.Connect(plant_output_port,
+                  drake_visualizer_->get_input_port(0));
 
   builder.ExportOutput(plant_output_port);
 

@@ -53,9 +53,9 @@ GTEST_TEST(GurobiTest, StarBattle) {
   }
   GurobiSolver gurobi_solver;
 
-  prog.SetSolverOption("GUROBI", "PoolSolutions", 1024);
-  prog.SetSolverOption("GUROBI", "PoolGap", 0.0);
-  prog.SetSolverOption("GUROBI", "PoolSearchMode", 2);
+  prog.SetSolverOption(SolverType::kGurobi, "PoolSolutions", 1024);
+  prog.SetSolverOption(SolverType::kGurobi, "PoolGap", 0.0);
+  prog.SetSolverOption(SolverType::kGurobi, "PoolSearchMode", 2);
 
   gurobi_solver.Solve(prog); //prog.Solve();
 
@@ -78,12 +78,12 @@ GTEST_TEST(GurobiTest, Knapsack) {
 
   GurobiSolver gurobi_solver;
 
-  prog.SetSolverOption("GUROBI", "PoolSolutions", 1024);
-  prog.SetSolverOption("GUROBI", "PoolGap", 0.10);
-  prog.SetSolverOption("GUROBI", "PoolSearchMode", 2);
+  prog.SetSolverOption(SolverType::kGurobi, "PoolSolutions", 1024);
+  prog.SetSolverOption(SolverType::kGurobi, "PoolGap", 0.10);
+  prog.SetSolverOption(SolverType::kGurobi, "PoolSearchMode", 2);
 
-  //prog.SetSolverOption("GUROBI", "LogToConsole", 1);
-  //prog.SetSolverOption("GUROBI", "OutputFlag", 1);
+  //prog.SetSolverOption(SolverType::kGurobi, "LogToConsole", 1);
+  //prog.SetSolverOption(SolverType::kGurobi, "OutputFlag", 1);
 
   gurobi_solver.Solve(prog);
 

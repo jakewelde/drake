@@ -458,7 +458,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
 
   // Attempt to submit all params to the generic environment
   if (!error) {
-    for (const auto it : prog.GetSolverOptionsDouble("GUROBI")) {
+    for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
       error = GRBsetdblparam(env, it.first.c_str(), it.second);
       if (error) {
         printf("Error setting double param %s to %f\n", it.first.c_str(), it.second);
@@ -467,7 +467,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     }
   }
   if (!error) {
-    for (const auto it : prog.GetSolverOptionsInt("GUROBI")) {
+    for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
       error = GRBsetintparam(env, it.first.c_str(), it.second);
       if (error) {
         printf("Error setting int param %s to %d\n", it.first.c_str(), it.second);
@@ -476,7 +476,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     }
   }  
   if (!error) {
-    for (const auto it : prog.GetSolverOptionsStr("GUROBI")) {
+    for (const auto it : prog.GetSolverOptionsStr(SolverType::kGurobi)) {
       error = GRBsetstrparam(env, it.first.c_str(), it.second.c_str());
       if (error) {
         printf("Error setting string param %s to %s\n", it.first.c_str(), it.second.c_str());
@@ -564,24 +564,22 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   // TODO(naveenoid) : This needs access externally.
   double sparseness_threshold = 1e-14;
   error = AddCosts(model, prog, sparseness_threshold);
+  DRAKE_DEMAND(!error);
 
-  if (!error) {
-    error = ProcessLinearConstraints(model, prog, sparseness_threshold);
-  }
+  error = ProcessLinearConstraints(model, prog, sparseness_threshold);
+  DRAKE_DEMAND(!error);
 
   // Add Lorentz cone constraints.
-  if (!error) {
-    error = AddSecondOrderConeConstraints(
-        prog, prog.lorentz_cone_constraints(), sparseness_threshold,
-        lorentz_cone_new_variable_indices, model);
-  }
+  error = AddSecondOrderConeConstraints(
+      prog, prog.lorentz_cone_constraints(), sparseness_threshold,
+      lorentz_cone_new_variable_indices, model);
+  DRAKE_DEMAND(!error);
 
   // Add rotated Lorentz cone constraints.
-  if (!error) {
-    error = AddSecondOrderConeConstraints(
-        prog, prog.rotated_lorentz_cone_constraints(), sparseness_threshold,
-        rotated_lorentz_cone_new_variable_indices, model);
-  }
+  error = AddSecondOrderConeConstraints(
+      prog, prog.rotated_lorentz_cone_constraints(), sparseness_threshold,
+      rotated_lorentz_cone_new_variable_indices, model);
+  DRAKE_DEMAND(!error);
 
   DRAKE_ASSERT(HasCorrectNumberOfVariables(model, is_new_variable.size()));
 
@@ -590,7 +588,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
   GRBenv *menv = NULL;
   menv = GRBgetenv(model);
   if (!error) {
-    for (const auto it : prog.GetSolverOptionsDouble("GUROBI")) {
+    for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
       error = GRBsetdblparam(menv, it.first.c_str(), it.second);
       if (error) {
         printf("Error setting double param %s to %f\n", it.first.c_str(), it.second);
@@ -599,7 +597,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     }
   }
   if (!error) {
-    for (const auto it : prog.GetSolverOptionsInt("GUROBI")) {
+    for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
       error = GRBsetintparam(menv, it.first.c_str(), it.second);
       if (error) {
         printf("Error setting int param %s to %d\n", it.first.c_str(), it.second);
@@ -608,7 +606,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     }
   }
   if (!error) {
-    for (const auto it : prog.GetSolverOptionsStr("GUROBI")) {
+    for (const auto it : prog.GetSolverOptionsStr(SolverType::kGurobi)) {
       error = GRBsetstrparam(menv, it.first.c_str(), it.second.c_str());
       if (error) {
         printf("Error setting string param %s to %s\n", it.first.c_str(), it.second.c_str());
@@ -625,17 +623,18 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       printf("Error setting initial guess at position %d to %f\n", i, prog.initial_guess()(i));
     }
   }
-  
+
   if (!error) {
     error = GRBoptimize(model);
   } else {
     printf("GUROBI internal error during setup: %s\n", GRBgeterrormsg(env));
   }
 
+  error = GRBoptimize(model);
+
   SolutionResult result = SolutionResult::kUnknownError;
 
-  // If any error exists so far, its either from invalid input or
-  // from unknown errors.
+  // If any error exists so far, it's from calling GRBoptimize.
   // TODO(naveenoid) : Properly handle gurobi specific error.
   // message.
   if (error) {
@@ -649,7 +648,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     if (optimstatus != GRB_OPTIMAL && optimstatus != GRB_SUBOPTIMAL &&
         optimstatus != GRB_ITERATION_LIMIT && optimstatus != GRB_NODE_LIMIT &&
         optimstatus != GRB_TIME_LIMIT && optimstatus != GRB_SOLUTION_LIMIT) {
-      if (optimstatus == GRB_INF_OR_UNBD) {
+      if (optimstatus == GRB_INF_OR_UNBD || optimstatus == GRB_INFEASIBLE) {
         result = SolutionResult::kInfeasibleConstraints;
       }
     } else {
@@ -710,7 +709,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     }
   }
 
-  prog.SetSolverResult(SolverName(), error);
+  prog.SetSolverResult(solver_type(), error);
 
   GRBfreemodel(model);
   GRBfreeenv(env);

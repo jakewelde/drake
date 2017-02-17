@@ -54,7 +54,6 @@ std::unique_ptr<ContinuousState<T>> Integrator<T>::AllocateContinuousState()
 template <typename T>
 void Integrator<T>::DoCalcTimeDerivatives(
     const Context<T>& context, ContinuousState<T>* derivatives) const {
-  DRAKE_ASSERT_VOID(System<T>::CheckValidContext(context));
   const BasicVector<T>* input = this->EvalVectorInput(context, 0);
   derivatives->SetFromVector(input->get_value());
 }
@@ -62,9 +61,6 @@ void Integrator<T>::DoCalcTimeDerivatives(
 template <typename T>
 void Integrator<T>::DoCalcOutput(const Context<T>& context,
                                  SystemOutput<T>* output) const {
-  DRAKE_ASSERT_VOID(System<T>::CheckValidOutput(output));
-  DRAKE_ASSERT_VOID(System<T>::CheckValidContext(context));
-
   // TODO(david-german-tri): Remove this copy by allowing output ports to be
   // mere pointers to state variables (or cache lines).
   System<T>::GetMutableOutputVector(output, 0) =
@@ -76,9 +72,15 @@ Integrator<AutoDiffXd>* Integrator<T>::DoToAutoDiffXd() const {
   return new Integrator<AutoDiffXd>(this->get_input_port(0).size());
 }
 
+template <typename T>
+Integrator<symbolic::Expression>* Integrator<T>::DoToSymbolic() const {
+  return new Integrator<symbolic::Expression>(this->get_input_port(0).size());
+}
+
 // Explicitly instantiates on the most common scalar types.
 template class Integrator<double>;
 template class Integrator<AutoDiffXd>;
+template class Integrator<symbolic::Expression>;
 
 }  // namespace systems
 }  // namespace drake

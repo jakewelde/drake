@@ -41,11 +41,12 @@ namespace systems {
 namespace plants {
 
 int GetIKSolverInfo(const MathematicalProgram& prog, SolutionResult result) {
-  std::string solver_name;
+  solvers::SolverType solver_type;
   int solver_result = 0;
-  prog.GetSolverResult(&solver_name, &solver_result);
+  prog.GetSolverResult(&solver_type, &solver_result);
 
-  if (solver_name == "SNOPT") {
+  if (solver_type ==
+      solvers::SolverType::kSnopt) {
     // We can return SNOPT results directly.
     return solver_result;
   }
@@ -74,17 +75,18 @@ int GetIKSolverInfo(const MathematicalProgram& prog, SolutionResult result) {
 
 void SetIKSolverOptions(const IKoptions& ikoptions,
                         drake::solvers::MathematicalProgram* prog) {
-  prog->SetSolverOption("SNOPT", "Derivative option", 1);
-  prog->SetSolverOption("SNOPT", "Major optimality tolerance",
-                        ikoptions.getMajorOptimalityTolerance());
-  prog->SetSolverOption("SNOPT", "Major feasibility tolerance",
-                        ikoptions.getMajorFeasibilityTolerance());
-  prog->SetSolverOption("SNOPT", "Superbasics limit",
-                        ikoptions.getSuperbasicsLimit());
-  prog->SetSolverOption("SNOPT", "Major iterations limit",
-                        ikoptions.getMajorIterationsLimit());
-  prog->SetSolverOption("SNOPT", "Iterations limit",
-                        ikoptions.getIterationsLimit());
+  prog->SetSolverOption(drake::solvers::SolverType::kSnopt,
+      "Derivative option", 1);
+  prog->SetSolverOption(drake::solvers::SolverType::kSnopt,
+      "Major optimality tolerance", ikoptions.getMajorOptimalityTolerance());
+  prog->SetSolverOption(drake::solvers::SolverType::kSnopt,
+      "Major feasibility tolerance", ikoptions.getMajorFeasibilityTolerance());
+  prog->SetSolverOption(drake::solvers::SolverType::kSnopt,
+      "Superbasics limit", ikoptions.getSuperbasicsLimit());
+  prog->SetSolverOption(drake::solvers::SolverType::kSnopt,
+      "Major iterations limit", ikoptions.getMajorIterationsLimit());
+  prog->SetSolverOption(drake::solvers::SolverType::kSnopt,
+      "Iterations limit", ikoptions.getIterationsLimit());
 }
 
 void AddSingleTimeLinearPostureConstraint(
@@ -159,16 +161,22 @@ class InverseKinObjective : public Constraint {
  public:
   // All references are aliased for the life of the objective.
   InverseKinObjective(const RigidBodyTree<double>* model, const MatrixXd& Q)
-      : Constraint(model->get_num_positions()), Q_(Q) {}
+      : Constraint(model->get_num_positions(), Q.rows()), Q_(Q) {}
 
-  void Eval(const Eigen::Ref<const Eigen::VectorXd>& x,
-            Eigen::VectorXd& y) const override {
+  /// Set the nominal posture.  This should be invoked before any
+  /// calls to Eval() (the output of Eval() is undefined if this has
+  /// not been set.)
+  void set_q_nom(const VectorXd& q_nom_i) { q_nom_i_ = q_nom_i; }
+
+ protected:
+  void DoEval(const Eigen::Ref<const Eigen::VectorXd>& x,
+                 Eigen::VectorXd& y) const override {
     VectorXd q_err = x - q_nom_i_;
     y(0) = q_err.transpose() * Q_ * q_err;
   }
 
-  void Eval(const Eigen::Ref<const TaylorVecXd>& x,
-            TaylorVecXd& y) const override {
+  void DoEval(const Eigen::Ref<const TaylorVecXd>& x,
+                 TaylorVecXd& y) const override {
     VectorXd x_val = autoDiffToValueMatrix(x);
     VectorXd q_err = x_val - q_nom_i_;
     VectorXd y_val = q_err.transpose() * Q_ * q_err;
@@ -177,11 +185,6 @@ class InverseKinObjective : public Constraint {
     math::initializeAutoDiffGivenGradientMatrix(
         y_val, (dy_vec * gradient_mat).eval(), y);
   }
-
-  /// Set the nominal posture.  This should be invoked before any
-  /// calls to Eval() (the output of Eval() is undefined if this has
-  /// not been set.)
-  void set_q_nom(const VectorXd& q_nom_i) { q_nom_i_ = q_nom_i; }
 
  private:
   const MatrixXd& Q_;
@@ -287,8 +290,7 @@ void inverseKinBackend(RigidBodyTree<double>* model, const int nT,
     }
 
     SolutionResult result = prog.Solve();
-    const VectorXd& vars_value =
-        prog.GetSolution(vars);
+    const VectorXd& vars_value = prog.GetSolution(vars);
     q_sol->col(t_index) = vars_value;
     info[t_index] = GetIKSolverInfo(prog, result);
   }

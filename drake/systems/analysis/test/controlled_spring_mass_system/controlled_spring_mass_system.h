@@ -2,13 +2,11 @@
 
 #include <memory>
 
+#include "drake/common/drake_copyable.h"
 #include "drake/systems/controllers/pid_controller.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/plants/spring_mass_system/spring_mass_system.h"
-#include "drake/systems/primitives/adder.h"
 #include "drake/systems/primitives/constant_vector_source.h"
-#include "drake/systems/primitives/demultiplexer.h"
-#include "drake/systems/primitives/gain.h"
 
 namespace drake {
 namespace systems {
@@ -29,6 +27,8 @@ namespace systems {
 template <typename T>
 class PidControlledSpringMassSystem : public Diagram<T> {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(PidControlledSpringMassSystem)
+
   /// Constructs a spring-mass system with a fixed spring constant and given
   /// mass controlled by a PID controller to achieve a specified target
   /// position.
@@ -66,11 +66,7 @@ class PidControlledSpringMassSystem : public Diagram<T> {
   // These are references into the Diagram; no ownership implied.
   SpringMassSystem<T>* plant_;
   PidController<T>* controller_;
-  Demultiplexer<T>* demux_;
-  Gain<T>* pid_inverter_;
-  Gain<T>* target_inverter_;
   ConstantVectorSource<T>* target_;
-  Adder<T>* state_minus_target_;
 };
 
 }  // namespace systems

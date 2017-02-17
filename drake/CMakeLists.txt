@@ -39,9 +39,6 @@ find_package(Doxygen MODULE)
 find_package(Perl MODULE)
 find_package(Threads MODULE REQUIRED)
 
-# set up pods
-include(../cmake/pods.cmake)
-
 # A compatibility shim function that declares a library, with a built-in
 # default of SHARED.
 function(add_library_with_exports)
@@ -176,8 +173,12 @@ if(Matlab_FOUND)
 endif()
 add_subdirectory(examples)
 
-if(Matlab_FOUND OR NOT DISABLE_PYTHON)
-  add_subdirectory(bindings)
+if(pybind11_FOUND AND NOT DISABLE_PYTHON AND NUMPY_FOUND)
+  if (NUMPY_VERSION VERSION_LESS 1.7)
+    message(WARNING "Python bindings are disabled because numpy version is less than 1.7")
+  else()
+    add_subdirectory(bindings)
+  endif()
 endif()
 
 if(BUILD_TESTING)

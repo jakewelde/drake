@@ -36,10 +36,16 @@ class DrivingCommand : public systems::BasicVector<T> {
     this->SetFromVector(VectorX<T>::Zero(K::kNumCoordinates));
   }
 
+  DrivingCommand<T>* DoClone() const override {
+    auto result = new DrivingCommand;
+    result->set_value(this->get_value());
+    return result;
+  }
+
   /// @name Getters and Setters
   //@{
-  /// The desired steering angle of a virtual center wheel, positive results in
-  /// the vehicle turning left.
+  /// The desired steering angle [radians] of a virtual center wheel, positive
+  /// results in the vehicle turning left.
   const T& steering_angle() const {
     return this->GetAtIndex(K::kSteeringAngle);
   }

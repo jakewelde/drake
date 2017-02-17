@@ -15,6 +15,8 @@ set(sources
   leaf_system.cc
   output_port_listener_interface.cc
   parameters.cc
+  single_output_vector_source.cc
+  sparsity_matrix.cc
   state.cc
   subvector.cc
   supervector.cc
@@ -23,7 +25,8 @@ set(sources
   system_output.cc
   system_port_descriptor.cc
   value.cc
-  vector_base.cc)
+  vector_base.cc
+  )
 
 # Headers that should be installed with Drake so that they
 # are available elsewhere via #include.
@@ -50,16 +53,19 @@ set(installed_headers
   leaf_system.h
   output_port_listener_interface.h
   parameters.h
+  single_output_vector_source.h
+  sparsity_matrix.h
   state.h
   subvector.h
   supervector.h
   system.h
-  systems.h
   system_input.h
   system_output.h
   system_port_descriptor.h
+  systems.h
   value.h
-  vector_base.h)
+  vector_base.h
+  )
 
 # Headers that are needed by code here but should not
 # be exposed anywhere else.

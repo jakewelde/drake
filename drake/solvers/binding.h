@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "drake/common/drake_copyable.h"
 #include "drake/solvers/decision_variable.h"
 
 namespace drake {
@@ -14,9 +15,13 @@ namespace solvers {
 template <typename C>
 class Binding {
  public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Binding)
+
   Binding(const std::shared_ptr<C>& c,
           const Eigen::Ref<const VectorXDecisionVariable>& v)
-      : constraint_(c), vars_(v) {}
+      : constraint_(c), vars_(v) {
+    DRAKE_DEMAND(c->num_vars() == v.rows() || c->num_vars() == Eigen::Dynamic);
+  }
 
   /**
    * Concatenates each VectorDecisionVariable object in @p v into a single
@@ -26,6 +31,8 @@ class Binding {
   Binding(const std::shared_ptr<C>& c, const VariableRefList& v)
       : constraint_(c) {
     vars_ = ConcatenateVariableRefList(v);
+    DRAKE_DEMAND(c->num_vars() == vars_.rows() ||
+                 c->num_vars() == Eigen::Dynamic);
   }
 
   template <typename U>

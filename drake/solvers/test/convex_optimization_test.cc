@@ -6,183 +6,37 @@
 
 #include "drake/common/eigen_matrix_compare.h"
 #include "drake/common/eigen_types.h"
+#include "drake/solvers/test/add_solver_util.h"
 #include "drake/solvers/test/mathematical_program_test_util.h"
+
+using Eigen::Vector2d;
+using Eigen::Matrix2d;
+using Eigen::Matrix3d;
+using Eigen::Vector3d;
+using Eigen::Vector4d;
+using Eigen::Matrix4d;
+using Eigen::RowVector2d;
 
 namespace drake {
 namespace solvers {
 namespace test {
 namespace {
-void GetLinearProgramSolvers(
-    std::list<std::unique_ptr<MathematicalProgramSolverInterface>>* solvers) {
-  AddSolverIfAvailable("Gurobi", solvers);
-  AddSolverIfAvailable("Mosek", solvers);
-  AddSolverIfAvailable("SNOPT", solvers);
-}
-
 void GetQuadraticProgramSolvers(
     std::list<std::unique_ptr<MathematicalProgramSolverInterface>>* solvers) {
-  AddSolverIfAvailable("Gurobi", solvers);
-  AddSolverIfAvailable("Mosek", solvers);
-  AddSolverIfAvailable("SNOPT", solvers);
+  AddSolverIfAvailable(SolverType::kGurobi, solvers);
+  AddSolverIfAvailable(SolverType::kMosek, solvers);
+  AddSolverIfAvailable(SolverType::kSnopt, solvers);
 }
 
 void GetSecondOrderConicProgramSolvers(
     std::list<std::unique_ptr<MathematicalProgramSolverInterface>>* solvers) {
-  AddSolverIfAvailable("Gurobi", solvers);
-  AddSolverIfAvailable("Mosek", solvers);
+  AddSolverIfAvailable(SolverType::kGurobi, solvers);
+  AddSolverIfAvailable(SolverType::kMosek, solvers);
 }
 
 void GetSemidefiniteProgramSolvers(
     std::list<std::unique_ptr<MathematicalProgramSolverInterface>>* solvers) {
-  AddSolverIfAvailable("Mosek", solvers);
-}
-
-/////////////////////////
-///// Linear Program ////
-/////////////////////////
-
-// Test a simple linear programming problem with zero cost, i.e. a feasibility
-// problem
-//    0 <= x0 + 2x1 + 3x2 <= 10
-// -inf <=       x1 - 2x2 <= 3
-//   -1 <= 0x0+ 0x1 + 0x2 <= 0
-//           x1 >= 1
-void TestLinearProgramFeasibility(
-    const MathematicalProgramSolverInterface& solver) {
-  MathematicalProgram prog;
-  auto x = prog.NewContinuousVariables<3>();
-  Eigen::Matrix<double, 3, 3> A;
-  A << 1, 2, 3, 0, 1, -2, 0, 0, 0;
-  Eigen::Vector3d b_lb(0, -std::numeric_limits<double>::infinity(), -1);
-  Eigen::Vector3d b_ub(10, 3, 0);
-  prog.AddLinearConstraint(A, b_lb, b_ub);
-  prog.AddBoundingBoxConstraint(1.0, std::numeric_limits<double>::infinity(),
-                                x(1));
-
-  if (solver.SolverName() == "SNOPT") {
-    prog.SetInitialGuessForAllVariables(Eigen::Vector3d::Zero());
-  }
-  RunSolver(&prog, solver);
-
-  const auto& x_value = prog.GetSolution(x);
-  Eigen::Vector3d A_times_x = A * x_value;
-  EXPECT_GE(A_times_x(0), 0 - 1e-10);
-  EXPECT_LE(A_times_x(0), 10 + 1e-10);
-  EXPECT_LE(A_times_x(1), 3 + 1E-10);
-  EXPECT_LE(A_times_x(2), 0 + 1E-10);
-  EXPECT_GE(A_times_x(2), 0 - 1E-10);
-  EXPECT_GE(prog.GetSolution(x(1)), 1 - 1E-10);
-}
-
-// Adapt from the linear programming example
-// http://cvxopt.org/examples/tutorial/lp.html
-// Solve the following linear program
-// min     2x0 + x1
-// s.t  -inf <= -x0 + x1 <= 1
-//         2 <= x0 + x1  <=inf
-//      -inf <= x0 - 2x1 <= 4
-//      x1 >= 2
-//      x0 >= 0
-// The optimal solution is x0 = 1, x1 = 2
-void TestLinearProgram0(const MathematicalProgramSolverInterface& solver) {
-  MathematicalProgram prog;
-  auto x = prog.NewContinuousVariables<2>();
-
-  prog.AddLinearCost(Eigen::Vector2d(2.0, 1.0));
-  Eigen::Matrix<double, 3, 2> A;
-  A << -1, 1, 1, 1, 1, -2;
-  Eigen::Vector3d b_lb(-std::numeric_limits<double>::infinity(), 2.0,
-                       -std::numeric_limits<double>::infinity());
-  Eigen::Vector3d b_ub(1.0, std::numeric_limits<double>::infinity(), 4.0);
-  prog.AddLinearConstraint(A, b_lb, b_ub);
-  prog.AddBoundingBoxConstraint(
-      Eigen::Vector2d(0.0, 2.0),
-      Eigen::Vector2d(std::numeric_limits<double>::infinity(),
-                      std::numeric_limits<double>::infinity()),
-      x.head<2>());
-
-  if (solver.SolverName() == "SNOPT") {
-    prog.SetInitialGuessForAllVariables(Eigen::Vector2d::Zero());
-  }
-  RunSolver(&prog, solver);
-
-  Eigen::Vector2d x_expected(1, 2);
-  const auto& x_value = prog.GetSolution(x);
-  EXPECT_TRUE(
-      CompareMatrices(x_value, x_expected, 1E-10, MatrixCompareType::absolute));
-}
-
-// Test a simple linear programming problem with only bounding box constraint
-// on x.
-// min x0 - 2*x1
-//     0 <= x0 <= 2
-//    -1 <= x1 <= 4
-// The optimal solution is (0, 4)
-void TestLinearProgram1(const MathematicalProgramSolverInterface& solver) {
-  MathematicalProgram prog;
-  auto x = prog.NewContinuousVariables<2>();
-  prog.AddLinearCost(Eigen::Vector2d(1.0, -2.0));
-  prog.AddBoundingBoxConstraint(Eigen::Vector2d(0, -1), Eigen::Vector2d(2, 4));
-
-  if (solver.SolverName() == "SNOPT") {
-    prog.SetInitialGuessForAllVariables(Eigen::Vector2d::Zero());
-  }
-  RunSolver(&prog, solver);
-
-  const auto& x_value = prog.GetSolution(x);
-  EXPECT_TRUE(x_value.isApprox(Eigen::Vector2d(0, 4)));
-}
-
-// Test a simple linear programming problem
-// Adapt from http://docs.mosek.com/7.1/capi/Linear_optimization.html
-// min -3x0 - x1 - 5x2 - x3
-// s.t     3x0 +  x1 + 2x2        = 30
-//   15 <= 2x0 +  x1 + 3x2 +  x3 <= inf
-//  -inf<=       2x1       + 3x3 <= 25
-// -inf <=  x0 + 2x1       + x3  <= inf
-// -100 <=  x0       + 2x2       <= 40
-//           0 <= x0 <= inf
-//           0 <= x1 <= 10
-//           0 <= x2 <= inf
-//           0 <= x3 <= inf
-// The optimal solution is at (0, 0, 15, 25/3)
-void TestLinearProgram2(const MathematicalProgramSolverInterface& solver) {
-  MathematicalProgram prog;
-  auto x = prog.NewContinuousVariables<4>();
-  // We deliberately break the cost to c1' * [x0;x1;x2] + c2'*[x2;x3] here
-  // to test adding multiple costs.
-  Eigen::Vector3d c1(-3, -1, -4);
-  Eigen::Vector2d c2(-1, -1);
-
-  prog.AddLinearCost(c1, x.head<3>());
-  prog.AddLinearCost(c2, x.tail<2>());
-
-  Eigen::RowVector3d a1(3, 1, 2);
-  prog.AddLinearEqualityConstraint(a1, 30, x.head<3>());
-
-  Eigen::Matrix<double, 4, 4> A;
-  A << 2, 1, 3, 1, 0, 2, 0, 3, 1, 2, 0, 1, 1, 0, 2, 0;
-  Eigen::Vector4d b_lb(15, -std::numeric_limits<double>::infinity(),
-                       -std::numeric_limits<double>::infinity(), -100);
-  Eigen::Vector4d b_ub(std::numeric_limits<double>::infinity(), 25,
-                       std::numeric_limits<double>::infinity(), 40);
-  prog.AddLinearConstraint(A, b_lb, b_ub);
-
-  prog.AddBoundingBoxConstraint(0, 10, x(1));
-  prog.AddBoundingBoxConstraint(
-      Eigen::Vector3d::Zero(),
-      Eigen::Vector3d::Constant(std::numeric_limits<double>::infinity()),
-      x.head<3>());
-
-  if (solver.SolverName() == "SNOPT") {
-    prog.SetInitialGuessForAllVariables(Eigen::Vector4d::Zero());
-  }
-  RunSolver(&prog, solver);
-
-  Eigen::Vector4d x_expected(0, 0, 15, 25.0 / 3.0);
-  const auto& x_value = prog.GetSolution(x);
-  EXPECT_TRUE(
-      CompareMatrices(x_value, x_expected, 1e-10, MatrixCompareType::absolute));
+  AddSolverIfAvailable(SolverType::kMosek, solvers);
 }
 
 /////////////////////////////////////////
@@ -204,10 +58,10 @@ void TestQuadraticProgram0(const MathematicalProgramSolverInterface& solver) {
   // 2x1^2 + x2^2 + x1x2 + x1
   // add a linear cost
   // x2
-  Eigen::Matrix2d Q;
+  Matrix2d Q;
   // The quadratic cost is 0.5*x'*Q*x+b'*x.
   Q << 4, 2, 0, 2;
-  Eigen::Vector2d b(1, 0);
+  Vector2d b(1, 0);
   prog.AddQuadraticCost(Q, b, x);
   prog.AddLinearCost(drake::Vector1d(1.0), x.segment<1>(1));
 
@@ -217,19 +71,19 @@ void TestQuadraticProgram0(const MathematicalProgramSolverInterface& solver) {
   // x2 >= -1
   // to test multiple bounding box constraints.
   prog.AddBoundingBoxConstraint(
-      Eigen::Vector2d(0, 0),
-      Eigen::Vector2d::Constant(std::numeric_limits<double>::infinity()), x);
+      Vector2d(0, 0),
+      Vector2d::Constant(std::numeric_limits<double>::infinity()), x);
   prog.AddBoundingBoxConstraint(-1, std::numeric_limits<double>::infinity(),
                                 x(1));
 
-  prog.AddLinearEqualityConstraint(Eigen::RowVector2d(1, 1), 1);
+  prog.AddLinearEqualityConstraint(RowVector2d(1, 1), 1, x);
 
-  if (solver.SolverName() == "SNOPT") {
-    prog.SetInitialGuessForAllVariables(Eigen::Vector2d::Zero());
+  if (solver.solver_type() == SolverType::kSnopt) {
+    prog.SetInitialGuessForAllVariables(Vector2d::Zero());
   }
   RunSolver(&prog, solver);
 
-  Eigen::Vector2d x_expected(0.25, 0.75);
+  Vector2d x_expected(0.25, 0.75);
   const auto& x_value = prog.GetSolution(x);
   EXPECT_TRUE(
       CompareMatrices(x_value, x_expected, 1E-8, MatrixCompareType::absolute));
@@ -248,18 +102,19 @@ void TestQuadraticProgram1(const MathematicalProgramSolverInterface& solver) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables(3);
 
-  Eigen::MatrixXd Q = 2 * Eigen::Matrix<double, 3, 3>::Identity();
+  Matrix3d Q = 2 * Matrix3d::Identity();
   Q(0, 1) = 1;
   Q(1, 2) = 1;
   Q(1, 0) = 1;
   Q(2, 1) = 1;
-  Eigen::VectorXd b(3);
+  Vector3d b{};
   b << 2.0, 0.0, 0.0;
-  prog.AddQuadraticCost(Q, b);
+  prog.AddQuadraticCost(Q, b, x);
 
   prog.AddBoundingBoxConstraint(
       Eigen::MatrixXd::Zero(3, 1),
-      Eigen::MatrixXd::Constant(3, 1, std::numeric_limits<double>::infinity()));
+      Eigen::MatrixXd::Constant(3, 1, std::numeric_limits<double>::infinity()),
+      x);
 
   // This test handles the case that in one LinearConstraint,
   // some rows have active upper bounds;
@@ -268,20 +123,20 @@ void TestQuadraticProgram1(const MathematicalProgramSolverInterface& solver) {
   // some rows have none.
   Eigen::Matrix<double, 4, 3> A1;
   A1 << 1, 2, 3, -1, -1, 0, 0, 1, 2, 1, 1, 2;
-  Eigen::Vector4d b_lb(4, -std::numeric_limits<double>::infinity(), -20,
+  Vector4d b_lb(4, -std::numeric_limits<double>::infinity(), -20,
                        -std::numeric_limits<double>::infinity());
-  Eigen::Vector4d b_ub(std::numeric_limits<double>::infinity(), -1, 100,
+  Vector4d b_ub(std::numeric_limits<double>::infinity(), -1, 100,
                        std::numeric_limits<double>::infinity());
-  prog.AddLinearConstraint(A1, b_lb, b_ub);
+  prog.AddLinearConstraint(A1, b_lb, b_ub, x);
   // This test also handles linear equality constraint
-  prog.AddLinearEqualityConstraint(Eigen::RowVector3d(3, 1, 3), 3);
+  prog.AddLinearEqualityConstraint(Eigen::RowVector3d(3, 1, 3), 3, x);
 
-  if (solver.SolverName() == "SNOPT") {
-    prog.SetInitialGuessForAllVariables(Eigen::Vector3d::Zero());
+  if (solver.solver_type() == SolverType::kSnopt) {
+    prog.SetInitialGuessForAllVariables(Vector3d::Zero());
   }
   RunSolver(&prog, solver);
 
-  Eigen::VectorXd expected(3);
+  Vector3d expected{};
   expected << 0, 1, 2.0 / 3.0;
 
   const auto& x_value = prog.GetSolution(x);
@@ -309,9 +164,9 @@ void TestQuadraticProgram2(const MathematicalProgramSolverInterface& solver) {
 
   b << 3.2, 1.3, 5.6, 9.0, 1.2;
 
-  prog.AddQuadraticCost(Q, b);
+  prog.AddQuadraticCost(Q, b, x);
 
-  if (solver.SolverName() == "SNOPT") {
+  if (solver.solver_type() == SolverType::kSnopt) {
     prog.SetInitialGuessForAllVariables(Eigen::Matrix<double, 5, 1>::Zero());
   }
   RunSolver(&prog, solver);
@@ -373,7 +228,7 @@ void TestQuadraticProgram3(const MathematicalProgramSolverInterface& solver) {
   // Exact solution.
   Eigen::VectorXd expected = -Q.ldlt().solve(b);
 
-  if (solver.SolverName() == "SNOPT") {
+  if (solver.solver_type() == SolverType::kSnopt) {
     prog.SetInitialGuessForAllVariables(Eigen::Matrix<double, 6, 1>::Zero());
   }
   RunSolver(&prog, solver);
@@ -395,14 +250,14 @@ void TestQuadraticProgram4(const MathematicalProgramSolverInterface& solver) {
   Eigen::Matrix3d Q = Eigen::Matrix3d::Identity();
   Q(2, 2) = 2.0;
   Eigen::Vector3d b = Eigen::Vector3d::Zero();
-  prog.AddQuadraticCost(Q, b);
+  prog.AddQuadraticCost(Q, b, x);
   prog.AddLinearEqualityConstraint(Eigen::RowVector2d(1, 1),
                                    Vector1d::Constant(1), x.head<2>());
   prog.AddLinearEqualityConstraint(Eigen::RowVector2d(1, 2),
                                    Vector1d::Constant(2),
                                    {x.segment<1>(0), x.segment<1>(2)});
 
-  if (solver.SolverName() == "SNOPT") {
+  if (solver.solver_type() == SolverType::kSnopt) {
     prog.SetInitialGuessForAllVariables(Eigen::Vector3d::Zero());
   }
   RunSolver(&prog, solver);
@@ -422,13 +277,13 @@ void TestQPonUnitBallExample(const MathematicalProgramSolverInterface& solver) {
   Eigen::Matrix2d Q = Eigen::Matrix2d::Identity();
   Eigen::Vector2d x_desired;
   x_desired << 1.0, 0.0;
-  auto objective = prog.AddQuadraticErrorCost(Q, x_desired);
+  auto objective = prog.AddQuadraticErrorCost(Q, x_desired, x);
 
   Eigen::Matrix2d A;
   A << 1.0, 1.0, -1.0, 1.0;
   Eigen::Vector2d ub = Eigen::Vector2d::Constant(1.0);
   Eigen::Vector2d lb = Eigen::Vector2d::Constant(-1.0);
-  auto constraint = prog.AddLinearConstraint(A, lb, ub);
+  auto constraint = prog.AddLinearConstraint(A, lb, ub, x);
   Eigen::Vector2d x_expected;
 
   const int N = 40;  // number of points to test around the circle
@@ -456,7 +311,7 @@ void TestQPonUnitBallExample(const MathematicalProgramSolverInterface& solver) {
           (x_desired(0) + x_desired(1) + 1.0) / 2.0;
     }
 
-    if (solver.SolverName() == "SNOPT") {
+    if (solver.solver_type() == SolverType::kSnopt) {
       prog.SetInitialGuessForAllVariables(Eigen::Vector2d::Zero());
     }
     RunSolver(&prog, solver);
@@ -478,7 +333,7 @@ void TestQPonUnitBallExample(const MathematicalProgramSolverInterface& solver) {
 
     SolutionResult result = SolutionResult::kUnknownError;
 
-    prog.SetSolverOption("GUROBI", "BarConvTol", 1E-9);
+    prog.SetSolverOption(SolverType::kGurobi, "BarConvTol", 1E-9);
     ASSERT_NO_THROW(result = prog.Solve());
     EXPECT_EQ(result, SolutionResult::kSolutionFound);
 
@@ -604,24 +459,19 @@ void RunEllipsoidsSeparation(const Eigen::MatrixBase<DerivedX1>& x1,
     auto y = prog_intersect.NewContinuousVariables(kXdim, "y");
 
     // Add the constraint that both
-    // A_lorentz3 * u1 + b_lorentz3
-    // and
-    // A_lorentz4 * u2 + b_lorentz4
-    // are in the Lorentz cone.
-    // A_lorentz3 = [0; I], b_lorentz3 = [1; 0]
-    // A_lorentz4 = [0; I], b_lorentz4 = [1; 0]
-    Eigen::MatrixXd A_lorentz3(R1.cols() + 1, R1.cols());
-    Eigen::MatrixXd A_lorentz4(R2.cols() + 1, R2.cols());
-    Eigen::VectorXd b_lorentz3(R1.cols() + 1);
-    Eigen::VectorXd b_lorentz4(R2.cols() + 1);
-    A_lorentz3 << Eigen::RowVectorXd::Zero(R1.cols()),
-        Eigen::MatrixXd::Identity(R1.cols(), R1.cols());
-    A_lorentz4 << Eigen::RowVectorXd::Zero(R2.cols()),
-        Eigen::MatrixXd::Identity(R2.cols(), R1.cols());
-    b_lorentz3 << 1, Eigen::VectorXd::Zero(R1.cols());
-    b_lorentz4 << 1, Eigen::VectorXd::Zero(R2.cols());
-    prog_intersect.AddLorentzConeConstraint(A_lorentz3, b_lorentz3, u1);
-    prog_intersect.AddLorentzConeConstraint(A_lorentz4, b_lorentz4, u2);
+    // [1; u1] and [1; u2] are in the Lorentz cone.
+    VectorX<symbolic::Expression> e1(1 + u1.rows());
+    VectorX<symbolic::Expression> e2(1 + u2.rows());
+    e1(0) = 1;
+    e2(0) = 1;
+    for (int i = 0; i < u1.rows(); ++i) {
+      e1(i + 1) = +u1(i);
+    }
+    for (int i = 0; i < u2.rows(); ++i) {
+      e2(i + 1) = +u2(i);
+    }
+    prog_intersect.AddLorentzConeConstraint(e1);
+    prog_intersect.AddLorentzConeConstraint(e2);
 
     // Add constraint y = x1 + R1*u1
     //                y = x2 + R2*u2
@@ -691,21 +541,11 @@ void SolveQPasSOCP(const Eigen::MatrixBase<DerivedQ>& Q,
 
   auto x_socp = prog_socp.NewContinuousVariables(kXdim, "x");
   auto y = prog_socp.NewContinuousVariables<1>("y");
-  auto w = prog_socp.NewContinuousVariables(kXdim, "w");
-
-  Eigen::MatrixXd A_lorentz(2 + kXdim, 1 + kXdim);
-  A_lorentz << Eigen::RowVectorXd::Zero(1 + kXdim),
-      Eigen::MatrixXd::Identity(1 + kXdim, 1 + kXdim);
-  Eigen::VectorXd b_lorentz(2 + kXdim);
-  b_lorentz << 2, Eigen::VectorXd::Zero(1 + kXdim);
-  prog_socp.AddRotatedLorentzConeConstraint(A_lorentz, b_lorentz, {y, w});
-
   Eigen::LLT<Eigen::MatrixXd, Eigen::Upper> lltOfQ(Q_symmetric);
   Eigen::MatrixXd Q_sqrt = lltOfQ.matrixU();
-  Eigen::MatrixXd A_w(kXdim, 2 * kXdim);
-  A_w << Eigen::MatrixXd::Identity(kXdim, kXdim), -Q_sqrt;
-  prog_socp.AddLinearEqualityConstraint(A_w, Eigen::VectorXd::Zero(kXdim),
-                                        {w, x_socp});
+  VectorX<symbolic::Expression> e(2 + kXdim);
+  e << +y(0), 2, Q_sqrt * x_socp;
+  prog_socp.AddRotatedLorentzConeConstraint(e);
 
   prog_socp.AddLinearConstraint(A, b_lb, b_ub, x_socp);
 
@@ -720,13 +560,9 @@ void SolveQPasSOCP(const Eigen::MatrixBase<DerivedQ>& Q,
       c.transpose() * x_socp_value + prog_socp.GetSolution(y(0));
 
   // Check the solution
-  const auto& w_value = prog_socp.GetSolution(w);
-  EXPECT_NEAR(2 * prog_socp.GetSolution(y(0)), w_value.squaredNorm(), 1E-6);
-  EXPECT_TRUE(CompareMatrices(w_value, Q_sqrt * x_socp_value, 1e-6,
-                              MatrixCompareType::absolute));
+  EXPECT_NEAR(2 * prog_socp.GetSolution(y(0)),
+              (Q_sqrt * x_socp_value).squaredNorm(), 1E-6);
   EXPECT_GE(prog_socp.GetSolution(y(0)), 0);
-  EXPECT_TRUE(CompareMatrices(w_value, Q_sqrt * x_socp_value, 1E-6,
-                              MatrixCompareType::absolute));
 
   // Now solve the problem as a QP.
   MathematicalProgram prog_qp;
@@ -861,13 +697,13 @@ void FindSpringEquilibrium(const Eigen::VectorXd& weight,
 
   RunSolver(&prog, solver);
 
-  std::string solver_name;
+  SolverType solver_type;
   int solver_result;
-  prog.GetSolverResult(&solver_name, &solver_result);
+  prog.GetSolverResult(&solver_type, &solver_result);
   double precision = 1e-3;
   // The precision of Gurobi solver is not as good as Mosek, in
   // this problem.
-  if (solver_name == "Gurobi") {
+  if (solver_type == SolverType::kGurobi) {
     precision = 2e-2;
   }
   for (int i = 0; i < num_nodes - 1; ++i) {
@@ -930,39 +766,8 @@ void TestFindSpringEquilibrium(
 }
 }  // namespace
 
-GTEST_TEST(TestConvexOptimization, TestLinearProgramFeasibility) {
-  std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
-  GetLinearProgramSolvers(&solvers);
-  for (const auto& solver : solvers) {
-    TestLinearProgramFeasibility(*solver);
-  }
-}
 
-GTEST_TEST(TestConvexOptimization, TestLinearProgram0) {
-  std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
-  GetLinearProgramSolvers(&solvers);
-  for (const auto& solver : solvers) {
-    TestLinearProgram0(*solver);
-  }
-}
-
-GTEST_TEST(TestConvexOptimization, TestLinearProgram1) {
-  std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
-  GetLinearProgramSolvers(&solvers);
-  for (const auto& solver : solvers) {
-    TestLinearProgram1(*solver);
-  }
-}
-
-GTEST_TEST(TestConvexOptimization, TestLinearProgram2) {
-  std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
-  GetLinearProgramSolvers(&solvers);
-  for (const auto& solver : solvers) {
-    TestLinearProgram2(*solver);
-  }
-}
-
-GTEST_TEST(TestConvexOptimization, TestQuadraticProgram0) {
+GTEST_TEST(TestQP, TestQuadraticProgram0) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetQuadraticProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -970,7 +775,7 @@ GTEST_TEST(TestConvexOptimization, TestQuadraticProgram0) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestL2NormCost) {
+GTEST_TEST(TestQP, TestL2NormCost) {
   MathematicalProgram prog;
   auto x = prog.NewContinuousVariables<2>();
 
@@ -1006,7 +811,7 @@ GTEST_TEST(TestConvexOptimization, TestL2NormCost) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestQuadraticProgram1) {
+GTEST_TEST(TestQP, TestQuadraticProgram1) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetQuadraticProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1014,7 +819,7 @@ GTEST_TEST(TestConvexOptimization, TestQuadraticProgram1) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestQuadraticProgram2) {
+GTEST_TEST(TestQP, TestQuadraticProgram2) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetQuadraticProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1022,7 +827,7 @@ GTEST_TEST(TestConvexOptimization, TestQuadraticProgram2) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestQuadraticProgram3) {
+GTEST_TEST(TestQP, TestQuadraticProgram3) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetQuadraticProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1030,7 +835,7 @@ GTEST_TEST(TestConvexOptimization, TestQuadraticProgram3) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestQuadraticProgram4) {
+GTEST_TEST(TestQP, TestQuadraticProgram4) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetQuadraticProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1038,7 +843,7 @@ GTEST_TEST(TestConvexOptimization, TestQuadraticProgram4) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestQuadraticProgramUnitBall) {
+GTEST_TEST(TestQP, TestQuadraticProgramUnitBall) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetQuadraticProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1046,7 +851,7 @@ GTEST_TEST(TestConvexOptimization, TestQuadraticProgramUnitBall) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestQuadraticProgram5) {
+GTEST_TEST(TestQP, TestQuadraticProgram5) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetQuadraticProgramSolvers(&solvers);
   Eigen::VectorXd solution;
@@ -1091,7 +896,7 @@ GTEST_TEST(TestConvexOptimization, TestQuadraticProgram5) {
     prog.AddLinearConstraint(CI_xy, ci_xy_lower, ci_xy_upper, {x, y});
     prog.AddLinearConstraint(CI_z, ci_z_lower, ci_z_upper, z);
 
-    if (solver->SolverName() == "SNOPT") {
+    if (solver->solver_type() == SolverType::kSnopt) {
       prog.SetInitialGuessForAllVariables(drake::Vector6<double>::Zero());
     }
     RunSolver(&prog, *solver);
@@ -1106,7 +911,7 @@ GTEST_TEST(TestConvexOptimization, TestQuadraticProgram5) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestEllipsoidsSeparation0) {
+GTEST_TEST(TestSOCP, TestEllipsoidsSeparation0) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSecondOrderConicProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1119,7 +924,7 @@ GTEST_TEST(TestConvexOptimization, TestEllipsoidsSeparation0) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestEllipsoidsSeparation1) {
+GTEST_TEST(TestSOCP, TestEllipsoidsSeparation1) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSecondOrderConicProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1133,7 +938,7 @@ GTEST_TEST(TestConvexOptimization, TestEllipsoidsSeparation1) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestEllipsoidsSeparation2) {
+GTEST_TEST(TestSOCP, TestEllipsoidsSeparation2) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSecondOrderConicProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1148,7 +953,7 @@ GTEST_TEST(TestConvexOptimization, TestEllipsoidsSeparation2) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestEllipsoidsSeparation3) {
+GTEST_TEST(TestSOCP, TestEllipsoidsSeparation3) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSecondOrderConicProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1163,7 +968,7 @@ GTEST_TEST(TestConvexOptimization, TestEllipsoidsSeparation3) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestQPasSOCP) {
+GTEST_TEST(TestSOCP, TestQPasSOCP) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSecondOrderConicProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1171,7 +976,7 @@ GTEST_TEST(TestConvexOptimization, TestQPasSOCP) {
   }
 }
 
-GTEST_TEST(TestConvexOptimization, TestFindSpringEquilibrium) {
+GTEST_TEST(TestSOCP, TestFindSpringEquilibrium) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSecondOrderConicProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1186,7 +991,7 @@ GTEST_TEST(TestConvexOptimization, TestFindSpringEquilibrium) {
 // The analytical solution is
 // S = [1 1]
 //     [1 1]
-GTEST_TEST(TestConvexOptimization, TestTrivialSDP) {
+GTEST_TEST(TestSemidefiniteProgram, TestTrivialSDP) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSemidefiniteProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
@@ -1209,66 +1014,28 @@ GTEST_TEST(TestConvexOptimization, TestTrivialSDP) {
   }
 }
 
-namespace {
-// Add condition A' * P + P * A + Q = 0
-//               Q is p.s.d
-template <int x_dim>
-MatrixDecisionVariable<x_dim, x_dim> AddLyapunovCondition(
-    const Eigen::Matrix<double, x_dim, x_dim>& A,
-    const MatrixDecisionVariable<x_dim, x_dim>& P, MathematicalProgram* prog) {
-  const auto Q = prog->NewSymmetricContinuousVariables<x_dim>();
-  prog->AddPositiveSemidefiniteConstraint(Q);
-  // TODO(hongkai.dai): Use symbolic variable to compute the expression
-  // A' * P + P * A + Q.
-  Eigen::Matrix<double, x_dim*(x_dim + 1) / 2, 1> lin_eq_bnd;
-  lin_eq_bnd.setZero();
-  std::vector<Eigen::Triplet<double>> lin_eq_triplets;
-  int lin_eq_idx = 0;
-  for (int j = 0; j < static_cast<int>(x_dim); ++j) {
-    for (int i = j; i < static_cast<int>(x_dim); ++i) {
-      for (int k = 0; k < static_cast<int>(x_dim); ++k) {
-        lin_eq_triplets.push_back(Eigen::Triplet<double>(
-            lin_eq_idx, prog->FindDecisionVariableIndex(P(k, j)), A(k, i)));
-        lin_eq_triplets.push_back(Eigen::Triplet<double>(
-            lin_eq_idx, prog->FindDecisionVariableIndex(P(i, k)), A(k, j)));
-      }
-      lin_eq_triplets.push_back(Eigen::Triplet<double>(
-          lin_eq_idx, prog->FindDecisionVariableIndex(Q(i, j)), 1.0));
-      ++lin_eq_idx;
-    }
-  }
-  Eigen::SparseMatrix<double> lin_eq_A_sparse(x_dim * (x_dim + 1) / 2,
-                                              prog->num_vars());
-  lin_eq_A_sparse.setFromTriplets(lin_eq_triplets.begin(),
-                                  lin_eq_triplets.end());
-
-  Eigen::MatrixXd lin_eq_A(lin_eq_A_sparse);
-  prog->AddLinearEqualityConstraint(lin_eq_A, lin_eq_bnd);
-  return Q;
-}
-}  // namespace
-
 // Solve a semidefinite programming problem.
 // Find the common Lyapunov function for linear systems
 // xdot = Ai*x
 // The condition is
 // min 0
-// s.t P is positive semidefinite
-//     Ai'*P + P*Ai is positive semidefinite
-GTEST_TEST(TestConvexOptimization, TestCommonLyapunov) {
+// s.t P is positive definite
+//     - (Ai'*P + P*Ai) is positive definite
+GTEST_TEST(TestSemidefiniteProgram, TestCommonLyapunov) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSemidefiniteProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
     MathematicalProgram prog;
     auto P = prog.NewSymmetricContinuousVariables<3>("P");
-    prog.AddPositiveSemidefiniteConstraint(P);
+    prog.AddPositiveSemidefiniteConstraint(P - 1E-3 * Matrix3d::Identity());
     Eigen::Matrix3d A1;
     // clang-format off
     A1 << -1, -1, -2,
            0, -1, -3,
            0, 0, -1;
     // clang-format on
-    const auto& Q1 = AddLyapunovCondition(A1, P, &prog);
+    auto binding1 = prog.AddPositiveSemidefiniteConstraint(
+        -A1.transpose() * P - P * A1 - 1E-3 * Matrix3d::Identity());
 
     Eigen::Matrix3d A2;
     // clang-format off
@@ -1276,29 +1043,117 @@ GTEST_TEST(TestConvexOptimization, TestCommonLyapunov) {
            0, -0.7, -2,
            0, 0, -0.4;
     // clang-format on
-    const auto& Q2 = AddLyapunovCondition(A2, P, &prog);
+    auto binding2 = prog.AddPositiveSemidefiniteConstraint(
+        -A2.transpose() * P - P * A2 - 1E-3 * Matrix3d::Identity());
 
     RunSolver(&prog, *solver);
 
-    Eigen::Matrix3d P_value = prog.GetSolution(P);
-    Eigen::Matrix3d Q1_value = prog.GetSolution(Q1);
-    Eigen::Matrix3d Q2_value = prog.GetSolution(Q2);
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigen_solver_P(P_value);
+    const Matrix3d P_value = prog.GetSolution(P);
+    const auto Q1_flat_value = prog.GetSolution(binding1.variables());
+    const auto Q2_flat_value = prog.GetSolution(binding2.variables());
+    const Eigen::Map<const Matrix3d> Q1_value(&Q1_flat_value(0));
+    const Eigen::Map<const Matrix3d> Q2_value(&Q2_flat_value(0));
+    Eigen::SelfAdjointEigenSolver<Matrix3d> eigen_solver_P(P_value);
 
     // The comparison tolerance is set as 1E-8, to match the Mosek default
     // feasibility tolerance 1E-8.
     EXPECT_TRUE(CompareMatrices(P_value, P_value.transpose(),
                                 std::numeric_limits<double>::epsilon(),
                                 MatrixCompareType::absolute));
-    EXPECT_GE(eigen_solver_P.eigenvalues().minCoeff(), -1E-8);
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigen_solver_Q1(Q1_value);
-    EXPECT_GE(eigen_solver_Q1.eigenvalues().minCoeff(), -1E-8);
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigen_solver_Q2(Q2_value);
-    EXPECT_GE(eigen_solver_Q2.eigenvalues().minCoeff(), -1E-8);
-    EXPECT_TRUE(CompareMatrices(A1.transpose() * P_value + P_value * A1,
-                                -Q1_value, 1e-8, MatrixCompareType::absolute));
-    EXPECT_TRUE(CompareMatrices(A2.transpose() * P_value + P_value * A2,
-                                -Q2_value, 1e-8, MatrixCompareType::absolute));
+    EXPECT_GE(eigen_solver_P.eigenvalues().minCoeff(), 0);
+    Eigen::SelfAdjointEigenSolver<Matrix3d> eigen_solver_Q1(Q1_value);
+    EXPECT_GE(eigen_solver_Q1.eigenvalues().minCoeff(), 0);
+    Eigen::SelfAdjointEigenSolver<Matrix3d> eigen_solver_Q2(Q2_value);
+    EXPECT_GE(eigen_solver_Q2.eigenvalues().minCoeff(), 0);
+    EXPECT_TRUE(CompareMatrices(
+        A1.transpose() * P_value + P_value * A1 + 1E-3 * Matrix3d::Identity(),
+        -Q1_value, 1E-8, MatrixCompareType::absolute));
+    EXPECT_TRUE(CompareMatrices(
+        A2.transpose() * P_value + P_value * A2 + 1E-3 * Matrix3d::Identity(),
+        -Q2_value, 1E-8, MatrixCompareType::absolute));
+  }
+}
+
+/*
+ * Given some ellipsoids ℰᵢ : xᵀ*Qi*x + 2 * biᵀ * x <= 1, i = 1, 2, ..., n,
+ * find an ellipsoid
+ * xᵀ*P*x + 2*cᵀ*x <= 1 as an outer approximation for the union of ellipsoids
+ * ℰᵢ.
+ * Using s-lemma, the ellipsoid xᵀ*P*x + 2*cᵀ*x <= 1 contains the ellipsoid
+ * ℰᵢ : xᵀ*Qi*x + 2*biᵀ*x <= 1, if and only if there exists a scalar si >= 0
+ * and (1 - xᵀ*P*x - cᵀ * x) - si*(1 - xᵀ*Qi*x - biᵀ * x) >= 0 ∀x.
+ * Namely the matrix
+ * [ si*Qi - P    si*bi - c]
+ * [si*biᵀ - cᵀ      1 - si]
+ * is positive semidefinite.
+ * In order to find a tight outer approximation, we choose to minimize the
+ * trace of P.
+ * The optimiation problem becomes
+ * min_{P, c, si} -trace(P)
+ * s.t [ si*Qi - P    si*bi - c] is p.s.d
+ *     [si*biᵀ - cᵀ      1 - si]
+ *     P is p.s.d
+ */
+GTEST_TEST(TestSemidefiniteProgram, TestOuterEllipsoid) {
+  std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
+  GetSemidefiniteProgramSolvers(&solvers);
+  std::array<Matrix3d, 3> Q;
+  std::array<Vector3d, 3> b;
+  Q[0] = Matrix3d::Identity();
+  b[0] = Vector3d::Zero();
+  // clang-format off
+  Q[1] << 1, 0.2, 0.3,
+         0.2, 2,  0.6,
+         0.3, 0.6, 3;
+  b[1] << 0.3, 2, 1;
+  Q[2] << 1, -0.1, 0.2,
+          -0.1, 4, 0.3,
+          0.2, 0.3, 3;
+  b[2] << 2, -1, 3;
+  // clang-format on
+  for (const auto& solver : solvers) {
+    MathematicalProgram prog;
+    auto P = prog.NewSymmetricContinuousVariables<3>("P");
+    prog.AddPositiveSemidefiniteConstraint(P);
+    auto s = prog.NewContinuousVariables<3>("s");
+    prog.AddBoundingBoxConstraint(0, std::numeric_limits<double>::infinity(),
+                                  s);
+    auto c = prog.NewContinuousVariables<3>("c");
+
+    for (int i = 0; i < 3; ++i) {
+      Eigen::Matrix<symbolic::Expression, 4, 4> M{};
+      // clang-format off
+      M << s(i) * Q[i] - P, s(i) * b[i] - c,
+           s(i) * b[i].transpose() - c.transpose(), 1 - s(i);
+      // clang-format on
+      prog.AddPositiveSemidefiniteConstraint(M);
+    }
+
+    // I have to compute trace of P in the loop, instead of using P.trace(),
+    // since Variable cannot be cast to Expression implicitly.
+    symbolic::Expression P_trace{0};
+    for (int i = 0; i < 3; ++i) {
+      P_trace += P(i, i);
+    }
+    prog.AddLinearCost(-P_trace);
+
+    RunSolver(&prog, *solver);
+
+    auto P_value = prog.GetSolution(P);
+    auto s_value = prog.GetSolution(s);
+    auto c_value = prog.GetSolution(c);
+
+    Eigen::SelfAdjointEigenSolver<Matrix3d> es_P(P_value);
+    EXPECT_TRUE((es_P.eigenvalues().array() >= -1E-6).all());
+    for (int i = 0; i < 3; ++i) {
+      Matrix4d M_value;
+      // clang-format off
+      M_value << s_value(i) * Q[i] - P_value, s_value(i) * b[i] - c_value,
+          s_value(i) * b[i].transpose() - c_value.transpose(), 1 - s_value(i);
+      // clang-format on
+      Eigen::SelfAdjointEigenSolver<Matrix4d> es_M(M_value);
+      EXPECT_TRUE((es_M.eigenvalues().array() >= -1E-6).all());
+    }
   }
 }
 
@@ -1309,19 +1164,19 @@ GTEST_TEST(TestConvexOptimization, TestCommonLyapunov) {
 // s.t z * Identity - x1 * F1 - ... - xn * Fn is p.s.d
 //     A * x <= b
 //     C * x = d
-GTEST_TEST(TestConvexOptimization, TestEigenvalueProblem) {
+GTEST_TEST(TestSemidefiniteProgram, TestEigenvalueProblem) {
   std::list<std::unique_ptr<MathematicalProgramSolverInterface>> solvers;
   GetSemidefiniteProgramSolvers(&solvers);
   for (const auto& solver : solvers) {
     MathematicalProgram prog;
     auto x = prog.NewContinuousVariables<2>("x");
-    Eigen::Matrix3d F1;
+    Matrix3d F1;
     // clang-format off
     F1 << 1, 0.2, 0.3,
           0.2, 2, -0.1,
           0.3, -0.1, 4;
     // clang-format on
-    Eigen::Matrix3d F2;
+    Matrix3d F2;
     // clang-format off
     F2 << 2, 0.4, 0.7,
          0.4, -1, 0.1,
@@ -1329,11 +1184,11 @@ GTEST_TEST(TestConvexOptimization, TestEigenvalueProblem) {
     // clang-format on
     auto z = prog.NewContinuousVariables<1>("z");
     prog.AddLinearMatrixInequalityConstraint(
-        {Eigen::Matrix3d::Zero(), Eigen::Matrix3d::Identity(), -F1, -F2},
+        {Matrix3d::Zero(), Matrix3d::Identity(), -F1, -F2},
         {z, x});
 
-    Eigen::Vector2d x_lb(0.1, 1);
-    Eigen::Vector2d x_ub(2, 3);
+    Vector2d x_lb(0.1, 1);
+    Vector2d x_ub(2, 3);
     prog.AddBoundingBoxConstraint(x_lb, x_ub, x);
 
     prog.AddLinearCost(drake::Vector1d(1), z);
@@ -1344,7 +1199,7 @@ GTEST_TEST(TestConvexOptimization, TestEigenvalueProblem) {
     auto x_value = prog.GetSolution(x);
     auto xF_sum = x_value(0) * F1 + x_value(1) * F2;
 
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigen_solver_xF(xF_sum);
+    Eigen::SelfAdjointEigenSolver<Matrix3d> eigen_solver_xF(xF_sum);
     // The comparison tolerance is set to 1E-7, slightly larger than Mosek's
     // default feasibility tolerance 1E-8.
     EXPECT_NEAR(z_value, eigen_solver_xF.eigenvalues().maxCoeff(), 1E-7);

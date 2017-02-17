@@ -1,7 +1,10 @@
+from __future__ import absolute_import, division, print_function
+
 import os
 import numpy as np
 import pydrake
 from pydrake.solvers import ik
+
 
 def load_robot_from_urdf(urdf_file):
     """
@@ -98,4 +101,4 @@ results = ik.InverseKin(robot, q_seed, q_seed, constraints, options)
 # optimizer.
 assert results.info[0] == 1
 
-print repr(results.q_sol[0])
+print(repr(results.q_sol[0]))

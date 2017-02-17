@@ -2,30 +2,32 @@
 # This file contains rules for Bazel; see drake/doc/bazel.rst.
 
 load("//tools:cpplint.bzl", "cpplint")
-load("//tools:drake.bzl", "cc_googletest")
+load("//tools:drake.bzl", "drake_cc_googletest", "drake_cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-cc_library(
+drake_cc_library(
     name = "model",
     srcs = [
+        "collision_filter.cc",
         "element.cc",
         "model.cc",
     ],
     hdrs = [
+        "collision_filter.h",
         "element.h",
         "model.h",
         "point_pair.h",
     ],
-    linkstatic = 1,
     deps = [
         "//drake/common",
+        "//drake/common:autodiff",
         "//drake/common:sorted_vectors_have_intersection",
         "//drake/multibody/shapes",
     ],
 )
 
-cc_library(
+drake_cc_library(
     name = "collision_api",
     hdrs = ["drake_collision.h"],
     deps = [
@@ -33,7 +35,7 @@ cc_library(
     ],
 )
 
-cc_library(
+drake_cc_library(
     name = "bullet_collision",
     srcs = [
         "bullet_model.cc",
@@ -41,7 +43,6 @@ cc_library(
         "drake_collision.cc",
     ],
     defines = ["BULLET_COLLISION"],
-    linkstatic = 1,
     deps = [
         ":collision_api",
         "@bullet//:lib",
@@ -51,14 +52,13 @@ cc_library(
 # TODO(jwnimmer-tri) Remove this once CMake is no longer using it (and thus we
 # can delete unusable_model.*).  This cc_library only exists a sanity check to
 # ensure the file still compiles.
-cc_library(
+drake_cc_library(
     name = "unusable_collision",
     srcs = [
         "drake_collision.cc",
         "unusable_model.cc",
         "unusable_model.h",
     ],
-    linkstatic = 1,
     visibility = ["//visibility:private"],
     deps = [
         ":collision_api",
@@ -67,13 +67,12 @@ cc_library(
 
 # N.B. This is just the FCL model, not the drake_collision dispatcher.  (The
 # other foo_collision libraries *do* contain the dispatcher.)
-cc_library(
+drake_cc_library(
     name = "fcl_collision",
     srcs = [
         "fcl_model.cc",
         "fcl_model.h",
     ],
-    linkstatic = 1,
     deps = [
         ":collision_api",
         "@fcl//:lib",
@@ -87,7 +86,7 @@ alias(
     actual = ":bullet_collision",
 )
 
-cc_googletest(
+drake_cc_googletest(
     name = "model_test",
     data = [":test_models"],
     deps = [
@@ -97,10 +96,21 @@ cc_googletest(
     ],
 )
 
-cc_googletest(
+drake_cc_googletest(
     name = "fcl_model_test",
     deps = [
         ":fcl_collision",
+    ],
+)
+
+drake_cc_googletest(
+    name = "collision_filter_group_test",
+    data = [":test_models"],
+    deps = [
+        ":collision",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/joints",
+        "//drake/multibody/parsers",
     ],
 )
 

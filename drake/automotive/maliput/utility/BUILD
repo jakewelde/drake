@@ -1,21 +1,28 @@
 # -*- python -*-
 # This file contains rules for Bazel; see drake/doc/bazel.rst.
 
+load("//tools:cpplint.bzl", "cpplint")
+load(
+    "//tools:drake.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_binary",
+)
+
 package(default_visibility = ["//visibility:public"])
 
-cc_library(
+drake_cc_library(
     name = "utility",
     srcs = [
         "generate_obj.cc",
         "generate_urdf.cc",
-        "infinite_circuit_road.cc"
+        "infinite_circuit_road.cc",
     ],
     hdrs = [
         "generate_obj.h",
         "generate_urdf.h",
-        "infinite_circuit_road.h"
+        "infinite_circuit_road.h",
     ],
-    linkstatic = 1,
     deps = [
         "//drake/automotive/maliput/api",
         "//drake/common",
@@ -23,7 +30,7 @@ cc_library(
     ],
 )
 
-cc_binary(
+drake_cc_binary(
     name = "yaml_to_obj",
     srcs = ["yaml_to_obj.cc"],
     deps = [
@@ -33,29 +40,22 @@ cc_binary(
     ],
 )
 
-
 # === test/ ===
 
-cc_test(
+drake_cc_googletest(
     name = "generate_urdf_test",
-    size = "small",
-    srcs = ["test/generate_urdf_test.cc"],
     deps = [
         ":utility",
         "//drake/automotive/maliput/monolane",
         "//drake/thirdParty:spruce",
-        "@gtest//:main",
     ],
 )
 
-cc_test(
+drake_cc_googletest(
     name = "infinite_circuit_road_test",
-    size = "small",
-    srcs = ["test/infinite_circuit_road_test.cc"],
     deps = [
         ":utility",
         "//drake/automotive/maliput/monolane",
-        "@gtest//:main",
     ],
 )
 
@@ -65,7 +65,9 @@ py_test(
     srcs = ["test/yaml_to_obj_test.py"],
     args = ["drake/automotive/maliput/utility/yaml_to_obj"],
     data = [
-        "//drake/automotive/maliput/monolane:yamls",
         ":yaml_to_obj",
+        "//drake/automotive/maliput/monolane:yamls",
     ],
 )
+
+cpplint()

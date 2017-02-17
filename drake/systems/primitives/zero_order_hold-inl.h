@@ -28,15 +28,12 @@ ZeroOrderHold<T>::ZeroOrderHold(const T& period_sec, int size) {
   // once #3109 supporting automatic sizes is resolved.
   this->DeclareInputPort(kVectorValued, size);
   this->DeclareOutputPort(kVectorValued, size);
-  this->DeclareUpdatePeriodSec(period_sec);
+  this->DeclareDiscreteUpdatePeriodSec(period_sec);
 }
 
 template <typename T>
 void ZeroOrderHold<T>::DoCalcOutput(const Context<T>& context,
                                     SystemOutput<T>* output) const {
-  DRAKE_ASSERT_VOID(System<T>::CheckValidOutput(output));
-  DRAKE_ASSERT_VOID(System<T>::CheckValidContext(context));
-
   System<T>::GetMutableOutputVector(output, 0) =
       context.get_discrete_state(0)->CopyToVector();
 }

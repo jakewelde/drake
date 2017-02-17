@@ -15,6 +15,7 @@
 #include "drake/multibody/material_map.h"
 #include "drake/multibody/parsers/model_instance_id_table.h"
 #include "drake/multibody/parsers/xml_util.h"
+#include "drake/multibody/collision/drake_collision.h"
 
 namespace drake {
 namespace parsers {
@@ -60,8 +61,7 @@ void ParseInertial(RigidBody<double>* body, XMLElement* node) {
     body->set_mass(body_mass);
   }
 
-  Eigen::Vector3d com;
-  com << T(0, 3), T(1, 3), T(2, 3);
+  Eigen::Vector3d com(T(0, 3), T(1, 3), T(2, 3));
   body->set_center_of_mass(com);
 
   drake::SquareTwistMatrix<double> I = drake::SquareTwistMatrix<double>::Zero();
@@ -539,6 +539,57 @@ void SetDynamics(XMLElement* node, FixedAxisOneDoFJoint<JointType>* fjoint) {
 }
 
 /**
+ * Parses the URDF collision filter group specification. Attempts to add
+ * collision filter groups (with their member lists and ignore lists) to the
+ * tree specification.  Inconsistent definitions will lead to thrown
+ * exceptions.
+ *
+ * @param tree                  The rigid body tree containing the bodies to
+ *                              which the filters will be applied.
+ * @param node                  The XML node containing the filter details.
+ * @param model_instance_id     The id of the current model instance.
+ */
+void ParseCollisionFilterGroup(RigidBodyTree<double>* tree, XMLElement* node,
+                               int model_instance_id) {
+  const char* attr = node->Attribute("drake_ignore");
+  if (attr && (std::strcmp(attr, "true") == 0)) return;
+
+  // TODO(SeanCurtis-TRI): After upgrading to newest tinyxml, add line numbers
+  // to error messages.
+  attr = node->Attribute("name");
+  if (!attr)
+    throw runtime_error(
+        "Collision filter group specification missing name attribute.");
+  string group_name(attr);
+
+  tree->DefineCollisionFilterGroup(group_name);
+
+  for (XMLElement* member_node = node->FirstChildElement("member"); member_node;
+       member_node = member_node->NextSiblingElement("member")) {
+    const char* link_name = member_node->Attribute("link");
+    if (!link_name)
+      throw runtime_error("Collision filter group " + group_name +
+                          " provides a member tag "
+                          "without specifying the \"link\" attribute.");
+    tree->AddCollisionFilterGroupMember(group_name, link_name,
+                                        model_instance_id);
+  }
+
+  for (XMLElement* ignore_node =
+           node->FirstChildElement("ignored_collision_filter_group");
+       ignore_node; ignore_node = ignore_node->NextSiblingElement(
+                        "ignored_collision_filter_group")) {
+    const char* target_name = ignore_node->Attribute("collision_filter_group");
+    if (!target_name)
+      throw runtime_error(
+          "Collision filter group provides a tag specifying a group to ignore "
+          "without specifying the \"collision_filter_group\" attribute.");
+
+    tree->AddCollisionFilterIgnoreTarget(group_name, target_name);
+  }
+}
+
+/**
  * Parses a joint URDF specification to obtain the names of the joint, parent
  * link, child link, and the joint type. An exception is thrown if any of these
  * names cannot be determined.
@@ -635,8 +686,7 @@ void ParseJoint(RigidBodyTree<double>* tree, XMLElement* node,
     originAttributesToTransform(origin, transform_to_parent_body);
   }
 
-  Vector3d axis;
-  axis << 1, 0, 0;
+  Vector3d axis(1, 0, 0);
   XMLElement* axis_node = node->FirstChildElement("axis");
   if (axis_node && type.compare("fixed") != 0 &&
       type.compare("floating") != 0) {
@@ -833,8 +883,7 @@ void ParseTransmission(RigidBodyTree<double>* tree,
 
 void ParseLoop(RigidBodyTree<double>* tree, XMLElement* node,
                int model_instance_id) {
-  Vector3d axis;
-  axis << 1.0, 0.0, 0.0;
+  Vector3d axis(1.0, 0.0, 0.0);
 
   if (!node || !node->Attribute("name"))
     throw runtime_error("ERROR: loop is missing a name element");
@@ -953,37 +1002,6 @@ void ParseWorldJoint(XMLElement* node,
   }
 }
 
-void parseCollisionFilterGroup(RigidBodyTree<double> *model, 
-                               XMLElement *node, 
-                               vector<string> &group_names, 
-                               vector<vector<string>> &group_members, 
-                               vector<vector<string>> &group_ignores)
-{
-  if (!node || !node->Attribute("name")) 
-    throw runtime_error(
-      "ERROR: collision filter group is missing a name element");
-  group_names.push_back(node->Attribute("name"));
-  group_members.resize(group_members.size() + 1);
-  group_ignores.resize(group_ignores.size() + 1);
-
-  for (XMLElement* member_node = node->FirstChildElement("member"); 
-       member_node; member_node = member_node->NextSiblingElement("member"))
-  {
-    group_members[group_names.size() - 1].push_back(
-      member_node->Attribute("link"));
-  }
-
-  for (XMLElement* ignored_group_node =  
-          node->FirstChildElement("ignored_collision_filter_group"); 
-       ignored_group_node; 
-       ignored_group_node = ignored_group_node->NextSiblingElement(
-          "ignored_collision_filter_group"))
-  {
-    group_ignores[group_names.size() - 1].push_back(
-      ignored_group_node->Attribute("collision_filter_group"));
-  }
-}
-
 ModelInstanceIdTable ParseModel(RigidBodyTree<double>* tree, XMLElement* node,
                                 const PackageMap& package_map,
                                 const string& root_dir,
@@ -1063,40 +1081,11 @@ ModelInstanceIdTable ParseModel(RigidBodyTree<double>* tree, XMLElement* node,
   // Parses the collision filter groups.
   vector<string> group_names;
   vector<vector<string>> group_members, group_ignores;
-  for (XMLElement* collision_filter_group_node =
-          node->FirstChildElement("collision_filter_group");
-       collision_filter_group_node;
-       collision_filter_group_node =
-          collision_filter_group_node->NextSiblingElement(
-            "collision_filter_group")) {
-    parseCollisionFilterGroup(tree,
-                              collision_filter_group_node,
-                              group_names,
-                              group_members,
-                              group_ignores);
-  }
-
-  // Applies collision filter groups.
-  DrakeCollision::bitmask belongs_to, ignores;
-  vector<string>::iterator ignored_group;
-  for (size_t group = 0; group < group_names.size(); group++)
-  {
-    belongs_to = DrakeCollision::NONE_MASK;
-    ignores = DrakeCollision::NONE_MASK;
-    belongs_to.set(group + 1);
-    for (auto ignored : group_ignores[group])
-    {
-    ignored_group = find(group_names.begin(), group_names.end(), ignored);
-      if (ignored_group != group_names.end())
-      {
-        ignores.set(ignored_group - group_names.begin() + 1);
-      }
-    }
-    for (auto link : group_members[group])
-    {
-      tree->findLink(link)->addToCollisionFilterGroup(belongs_to);
-      tree->findLink(link)->ignoreCollisionFilterGroup(ignores);
-    }
+  for (XMLElement* group_node =
+           node->FirstChildElement("collision_filter_group");
+       group_node;
+       group_node = group_node->NextSiblingElement("collision_filter_group")) {
+    ParseCollisionFilterGroup(tree, group_node, model_instance_id);
   }
 
   // Parses the model's joint elements.
@@ -1314,7 +1303,8 @@ std::shared_ptr<RigidBodyFrame<double>> MakeRigidBodyFrameFromUrdfNode(
                         "\" referenced in frame \"" + name + "\".");
   }
 
-  Vector3d xyz = Vector3d::Zero(), rpy = Vector3d::Zero();
+  Vector3d xyz = Vector3d::Zero();
+  Vector3d rpy = Vector3d::Zero();
   if (pose) {
     parseVectorAttribute(pose, "xyz", xyz);
     parseVectorAttribute(pose, "rpy", rpy);
