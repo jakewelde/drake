@@ -16,7 +16,6 @@ drake_cc_library(
         "drakeGeometryUtil.h",
         "drakeUtil.h",
     ],
-    deprecation = "Consider pitching in by porting the dependencies you need to //drake/math.",
     deps = [
         "//drake/common",
         "//drake/math:geometric_transform",
@@ -39,6 +38,12 @@ drake_cc_library(
         "@bot_core_lcmtypes//:lib",
         "@eigen//:eigen",
     ],
+)
+
+drake_cc_library(
+    name = "app_util",
+    hdrs = ["drakeAppUtil.h"],
+    deprecation = "Please use gflags instead of drakeAppUtil.h.",
 )
 
 cpplint()

@@ -109,6 +109,14 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "contact_force_formula_test",
+    deps = [
+        ":rigid_body_plant",
+        "//drake/common:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
     name = "contact_info_test",
     deps = [
         ":rigid_body_plant",
@@ -128,6 +136,7 @@ drake_cc_googletest(
     data = ["//drake/multibody/collision:test_models"],
     deps = [
         ":drake_visualizer",
+        "//drake/common:drake_path",
         "//drake/lcm:mock",
         "//drake/systems/analysis",
     ],
@@ -148,6 +157,7 @@ drake_cc_googletest(
     data = [
         ":test_models",
         "//drake/examples/kuka_iiwa_arm:models",
+        "//drake/multibody:models",
         "//drake/multibody:test_models",
     ],
     deps = [

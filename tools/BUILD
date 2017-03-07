@@ -23,9 +23,29 @@ py_binary(
     srcs = ["drakelint.py"],
 )
 
+exports_files(
+    ["nlopt-gen-hpp.sh"],
+    visibility = ["@nlopt//:__pkg__"],
+)
+
 alias(
     name = "buildifier",
     actual = "@com_github_bazelbuild_buildifier//buildifier",
+)
+
+# This pulls the otherwise-unused libbot targets into the "//..." label tree.
+genrule(
+    name = "force_libbot",
+    srcs = [
+        "@libbot//:bot-lcm-logfilter",
+        "@libbot//:bot-lcm-logsplice",
+        "@libbot//:bot-lcm-tunnel",
+        "@libbot//:bot-spy",
+        "@libbot//:lcmtypes_bot2-core-py",
+    ],
+    outs = ["force_libbot.touch"],
+    cmd = "touch $(@)",
+    visibility = ["//visibility:private"],
 )
 
 # === CROSSTOOL rules ===
@@ -39,10 +59,14 @@ alias(
 # former.
 #
 # On Linux, we support --compiler strings "clang-3.9", "gcc-4.9", and "gcc-5",
-# each of which does exactly what you would expect.  "clang-3.9" is the default
+# each of which does exactly what you would expect. "clang-3.9" is the default
 # for convenience, because the Drake install instructions provide it on both
-# Trusty and Xenial. No wrapper script is needed for any of these compilers,
-# so the cc_toolchain rule does not provide one.
+# Trusty and Xenial. No wrapper script is needed for any of these compilers, so
+# the cc_toolchain rule does not provide one. Support for "gcc-6" is
+# experimental without any guarantees. Note that it is not in our supported
+# configurations yet. See
+# http://drake.mit.edu/developers.html#supported-configurations for more
+# information.
 cc_toolchain_suite(
     name = "default-toolchain",
     toolchains = {
@@ -50,6 +74,7 @@ cc_toolchain_suite(
         "k8|clang-3.9": "cc_toolchain_linux",
         "k8|gcc-4.9": "cc_toolchain_linux",
         "k8|gcc-5": "cc_toolchain_linux",
+        "k8|gcc-6": "cc_toolchain_linux",
     },
 )
 
@@ -164,6 +189,14 @@ config_setting(
 )
 
 config_setting(
+    name = "gcc6-linux",
+    values = {
+        "compiler": "gcc-6",
+        "cpu": "k8",
+    },
+)
+
+config_setting(
     name = "gcc5-linux",
     values = {
         "compiler": "gcc-5",
@@ -184,5 +217,13 @@ config_setting(
     values = {
         "compiler": "clang-3.9",
         "cpu": "k8",
+    },
+)
+
+config_setting(
+    name = "apple_debug",
+    values = {
+        "compilation_mode": "dbg",
+        "cpu": "darwin",
     },
 )

@@ -6,6 +6,7 @@
 #include <ostream>
 #include <set>
 #include <unordered_map>
+#include <utility>
 
 #include <Eigen/Core>
 
@@ -20,7 +21,6 @@ namespace drake {
 
 namespace symbolic {
 
-namespace internal {
 // Computes "n choose k", the number of ways, disregarding order, that k objects
 // can be chosen from among n objects.
 constexpr int NChooseK(int n, int k) {
@@ -34,10 +34,13 @@ constexpr int NChooseK(int n, int k) {
 class Monomial {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Monomial)
+
   /** Constructs a monomial equal to 1. Namely the total degree is zero. */
   Monomial();
+
   /** Constructs a Monomial from @p powers. */
   explicit Monomial(const std::map<Variable::Id, int>& powers);
+
   /** Constructs a Monomial from @p var and @exponent. */
   Monomial(const Variable& var, int exponent);
 
@@ -45,25 +48,49 @@ class Monomial {
    * Converts an expression to a monomial, if the expression is written as
    * ∏ᵢpow(xᵢ, kᵢ), otherwise throws a runtime error.
    * @pre{is_polynomial(e) should be true.}
-   * Note that we cannot handle the case that the expression contains
-   * addition/subtraction yet, namely x*(y+z)-x*z will not be converted to a
-   * monomial.
-   * TODO(hongkai.dai):make sure x*(y+z)-x*z will be converted to a monomial, when
-   * we get "Expression::Expand" function working.
    */
   explicit Monomial(const Expression& e);
 
   /** Returns the total degree of this Monomial. */
   int total_degree() const { return total_degree_; }
+
   /** Returns hash value. */
   size_t GetHash() const;
+
+  /** Returns the internal representation of Monomial, the map from a base
+   * (Variable ID) to its exponent (int).*/
   const std::map<Variable::Id, int>& get_powers() const { return powers_; }
+
+  /** Evaluates under a given environment @p env.
+   * Throws std::out_of_range exception if there is a variable ID in this
+   * monomial whose assignment is not provided by @p env.
+   */
+  double Evaluate(const std::unordered_map<Variable::Id, double>& env) const;
+
+  /** Substitutes using a given environment @p env. The substitution result is
+   * of type pair<double, Monomial>. The first component (: double) represents
+   * the coefficient part while the second component represents the remaining
+   * parts of the Monomial which was not substituted. Note that users are
+   * allowed to provide a partial environment.
+   *
+   * Example 1. Substitution with a fully-specified environment
+   *     (x^3*y^2).Substitute({{ID_x, 2}, {ID_y, 3}})
+   *   = (2^3 * 3^2 = 8 * 9 = 72, Monomial{} = 1).
+   *
+   * Example 1. Substitution with a partial environment
+   *     (x^3*y^2).Substitute({{ID_x, 2}})
+   *   = (2^3 = 8, y^2).
+   */
+  std::pair<double, Monomial> Substitute(
+      const std::unordered_map<Variable::Id, double>& env) const;
+
   /** Returns a symbolic expression representing this monomial. Since, this
    * class only includes the ID of a variable, not a variable itself, we need
    * @id_to_var_map, a map from a variable ID to a variable as an argument of
    * this method to build an expression. */
   Expression ToExpression(
       const std::unordered_map<Variable::Id, Variable>& id_to_var_map) const;
+
   /** Checks if this monomial and @p m represent the same monomial.
    * Two monomials are equal iff they contain the same variable ID
    * raised to the same exponent. */
@@ -217,8 +244,6 @@ Eigen::Matrix<Expression, rows, 1> ComputeMonomialBasis(const Variables& vars,
   return basis;
 }
 
-}  // namespace internal
-
 /**
  * Returns the total degrees of the polynomial @p e w.r.t the variables in @p
  * vars. For example, the total degree of
@@ -275,17 +300,17 @@ Eigen::Matrix<Expression, Eigen::Dynamic, 1> MonomialBasis(
  * \pre{<tt>vars.size()</tt> == @p.}
  */
 template <int n, int degree>
-Eigen::Matrix<Expression, internal::NChooseK(n + degree, degree), 1>
+Eigen::Matrix<Expression, NChooseK(n + degree, degree), 1>
 MonomialBasis(const Variables& vars) {
   static_assert(n > 0, "n should be a positive integer.");
   static_assert(degree >= 0, "degree should be a non-negative integer.");
   DRAKE_ASSERT(vars.size() == n);
-  return internal::ComputeMonomialBasis<internal::NChooseK(n + degree, degree)>(
+  return ComputeMonomialBasis<NChooseK(n + degree, degree)>(
       vars, degree);
 }
 
 typedef std::unordered_map<Expression, Expression, hash_value<Expression>>
-    MonomialToCoefficientMap;
+    MonomialAsExpressionToCoefficientMap;
 /**
  * Decomposes a polynomial `e` into monomials, with respect to a specified set
  * of variables `vars`.
@@ -316,8 +341,8 @@ typedef std::unordered_map<Expression, Expression, hash_value<Expression>>
  * @retval monomial_to_coeff_map Map the monomial to the coefficient in each
  * term of the polynomial.
  */
-MonomialToCoefficientMap DecomposePolynomial(const Expression& e,
-                                             const Variables& vars);
+MonomialAsExpressionToCoefficientMap DecomposePolynomialIntoExpression(
+    const Expression& e, const Variables& vars);
 
 /**
  * Decomposes a polynomial as the summation of coefficients multiply monomials,
@@ -332,14 +357,40 @@ MonomialToCoefficientMap DecomposePolynomial(const Expression& e,
  * @return map. The key of the map is the monomial, with the value being the
  * coefficient.
  */
-MonomialToCoefficientMap DecomposePolynomial(const Expression& e);
+MonomialAsExpressionToCoefficientMap DecomposePolynomialIntoExpression(
+    const Expression& e);
 }  // namespace symbolic
 
 /** Computes the hash value of a Monomial. */
 template <>
-struct hash_value<symbolic::internal::Monomial> {
-  size_t operator()(const symbolic::internal::Monomial& m) const {
+struct hash_value<symbolic::Monomial> {
+  size_t operator()(const symbolic::Monomial& m) const {
     return m.GetHash();
   }
 };
+
+namespace symbolic {
+/**
+ * Maps a monomial to a coefficient. This map can be used to represent a
+ * polynomial, such that the polynomial is
+ *   ∑ map[key] * key
+ * Compared to MonomialAsExpressionToCoefficientMap, using Monomial as the key
+ * type should be faster than using the Expression as the key type.
+ */
+typedef std::unordered_map<Monomial, Expression, hash_value<Monomial>>
+    MonomialToCoefficientMap;
+
+/**
+ * Decomposes a polynomial into monomial and its coefficient. Throws a runtime
+ * error if the expression is not a polynomial.
+ * @see DecomposePolynomialIntoExpression();
+ * Using MonomialToCoefficientMap is faster and more specific than using
+ * MonomialAsExpressionToCoefficientMap, so prefer
+ * DecomposePolynomialIntoMonomial to DecomposePolynomialIntoExpression when
+ * speed is a concern.
+ */
+MonomialToCoefficientMap DecomposePolynomialIntoMonomial(const Expression& e,
+                                                         const Variables& vars);
+
+}  // namespace symbolic
 }  // namespace drake

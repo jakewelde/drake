@@ -452,6 +452,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
 
   GRBenv* env = nullptr;
   GRBloadenv(&env, nullptr);
+
   // Corresponds to no console or file logging.
   int error = 0;
   GRBsetintparam(env, GRB_INT_PAR_OUTPUTFLAG, 0);  
@@ -583,36 +584,30 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
 
   DRAKE_ASSERT(HasCorrectNumberOfVariables(model, is_new_variable.size()));
 
-  // Request the model's environment (which is *slightly different* for reasons I don't
-  // understand) and resubmit all params to that one.
-  GRBenv *menv = NULL;
-  menv = GRBgetenv(model);
-  if (!error) {
-    for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
-      error = GRBsetdblparam(menv, it.first.c_str(), it.second);
-      if (error) {
-        printf("Error setting double param %s to %f\n", it.first.c_str(), it.second);
-        continue;
-      }
-    }
+  // The new model gets a copy of the Gurobi environment, so when we set
+  // parameters, we have to be sure to set them on the model's environment,
+  // not the global gurobi environment.
+  // See: FAQ #11: http://www.gurobi.com/support/faqs
+  // Note that it is not necessary to free this environment; rather,
+  // we just have to call GRBfreemodel(model).
+  GRBenv* model_env = GRBgetenv(model);
+  DRAKE_DEMAND(model_env);
+
+  // Corresponds to no console or file logging (this is the default, which
+  // can be overridden by parameters set in the MathematicalProgram).
+  GRBsetintparam(model_env, GRB_INT_PAR_OUTPUTFLAG, 0);
+
+  for (const auto it : prog.GetSolverOptionsDouble(SolverType::kGurobi)) {
+    error = GRBsetdblparam(model_env, it.first.c_str(), it.second);
+    DRAKE_DEMAND(!error);
   }
-  if (!error) {
-    for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
-      error = GRBsetintparam(menv, it.first.c_str(), it.second);
-      if (error) {
-        printf("Error setting int param %s to %d\n", it.first.c_str(), it.second);
-        continue;
-      }
-    }
+  for (const auto it : prog.GetSolverOptionsInt(SolverType::kGurobi)) {
+    error = GRBsetintparam(model_env, it.first.c_str(), it.second);
+    DRAKE_DEMAND(!error);
   }
-  if (!error) {
-    for (const auto it : prog.GetSolverOptionsStr(SolverType::kGurobi)) {
-      error = GRBsetstrparam(menv, it.first.c_str(), it.second.c_str());
-      if (error) {
-        printf("Error setting string param %s to %s\n", it.first.c_str(), it.second.c_str());
-        continue;
-      }
-    }
+  for (const auto it : prog.GetSolverOptionsStr(SolverType::kGurobi)) {
+    error = GRBsetstrparam(model_env, it.first.c_str(), it.second.c_str());
+    DRAKE_DEMAND(!error);
   }
 
   for (int i=0; i<prog.initial_guess().rows(); i++){
@@ -622,12 +617,6 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     if (error){
       printf("Error setting initial guess at position %d to %f\n", i, prog.initial_guess()(i));
     }
-  }
-
-  if (!error) {
-    error = GRBoptimize(model);
-  } else {
-    printf("GUROBI internal error during setup: %s\n", GRBgeterrormsg(env));
   }
 
   error = GRBoptimize(model);
@@ -645,11 +634,20 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
     int optimstatus = 0;
     GRBgetintattr(model, GRB_INT_ATTR_STATUS, &optimstatus);
 
-    if (optimstatus != GRB_OPTIMAL && optimstatus != GRB_SUBOPTIMAL &&
-        optimstatus != GRB_ITERATION_LIMIT && optimstatus != GRB_NODE_LIMIT &&
-        optimstatus != GRB_TIME_LIMIT && optimstatus != GRB_SOLUTION_LIMIT) {
-      if (optimstatus == GRB_INF_OR_UNBD || optimstatus == GRB_INFEASIBLE) {
-        result = SolutionResult::kInfeasibleConstraints;
+    if (optimstatus != GRB_OPTIMAL && optimstatus != GRB_SUBOPTIMAL) {
+      switch (optimstatus) {
+        case GRB_INF_OR_UNBD : {
+          result = SolutionResult::kInfeasible_Or_Unbounded;
+          break;
+        }
+        case GRB_UNBOUNDED : {
+          result = SolutionResult::kUnbounded;
+          break;
+        }
+        case GRB_INFEASIBLE : {
+          result = SolutionResult::kInfeasibleConstraints;
+          break;
+        }
       }
     } else {
       if (optimstatus == GRB_OPTIMAL)
@@ -674,7 +672,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       int n_solutions;
       error = GRBgetintattr(model, "SolCount", &n_solutions);
       if (error){
-        printf("GUROBI internal error during solve: %s\n", GRBgeterrormsg(menv));
+        printf("GUROBI internal error during solve: %s\n", GRBgeterrormsg(model_env));
       } else {
         prog.SetNumberOfSolutions(n_solutions);
         for (int k=0; k<n_solutions; k++){
@@ -682,7 +680,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
           for (int i=0; i < num_total_variables; i++){
               solver_sol_vector[i] = 0.0;
           }
-          error = GRBsetintparam(menv, "SolutionNumber", k);
+          error = GRBsetintparam(model_env, "SolutionNumber", k);
           if (k == 0){
             error = GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, num_total_variables,
 			                                 solver_sol_vector.data());
@@ -703,7 +701,7 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
           prog.SetDecisionVariableValues(prog_sol_vector, k);
         }
         if (error){
-          printf("GUROBI internal error during solution extraction: %s\n", GRBgeterrormsg(menv));
+          printf("GUROBI internal error during solution extraction: %s\n", GRBgeterrormsg(model_env));
         }
       }
     }
