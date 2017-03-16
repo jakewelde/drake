@@ -8,12 +8,14 @@
 
 #include "drake/common/drake_path.h"
 #include "drake/common/eigen_types.h"
+#include "drake/common/symbolic_formula.h"
 #include "drake/multibody/collision/element.h"
 #include "drake/multibody/collision/model.h"
 #include "drake/multibody/parsers/urdf_parser.h"
 #include "drake/multibody/rigid_body.h"
 #include "drake/multibody/rigid_body_tree.h"
 #include "drake/solvers/mathematical_program.h"
+#include "drake/solvers/rotation_constraint.h"
 #include "drake/systems/estimators/dev/rotation.h"
 
 // Note: Currently assumes that the tree has only the world plus a single body,
@@ -296,6 +298,15 @@ int main(int argc, char** argv) {
   }
   lcm->publish("DRAKE_POINTCLOUD_FROM_URDF", &msg);
   lcm->handleTimeout(0);
+
+  // Create a Mathematical Program and add some symbolic constraints using
+  // RBT relative transforms.
+  auto tf = robot.relativeTransform(cache, 1, 0);
+  drake::solvers::MathematicalProgram prog;
+  drake::solvers::MatrixDecisionVariable<3,3> R = NewRotationMatrixVars(&prog, "R");
+  drake::symbolic::Formula f {R == tf.rotation()};
+  prog.AddLinearConstraint(f);
+  // That's just a compile test for now, we won't bother trying to solve.
 
   return 0;
 }

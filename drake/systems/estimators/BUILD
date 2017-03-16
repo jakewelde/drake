@@ -2,7 +2,7 @@
 # This file contains rules for Bazel; see drake/doc/bazel.rst.
 
 load("//tools:cpplint.bzl", "cpplint")
-load("//tools:drake.bzl", "drake_cc_googletest", "drake_cc_library")
+load("//tools:drake.bzl", "drake_cc_googletest", "drake_cc_library", "drake_cc_binary")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -44,6 +44,22 @@ drake_cc_googletest(
         "//drake/common:eigen_matrix_compare",
         "//drake/systems/primitives:linear_system",
     ],
+)
+
+# === dev/ ===
+
+drake_cc_binary(
+    name = "pose_estimation_test",
+    deps = [
+        "//drake/common:drake_path",
+        "//drake/multibody:rigid_body_tree",
+        "//drake/multibody/parsers",
+        "//drake/solvers:mathematical_program",
+        "//drake/solvers:rotation_constraint",
+        "@bot_core_lcmtypes//:lib",
+    ],
+    srcs = ["dev/pose_estimation_test.cc",
+            "dev/rotation.h"],
 )
 
 cpplint()
