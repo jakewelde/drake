@@ -1890,6 +1890,13 @@ class MathematicalProgram {
   void SetOptimalCost(double optimal_cost) { optimal_cost_ = optimal_cost; }
 
   /**
+   * Getter and setter for lower bound on optical cost. Will return NaN
+   * if this has not been discovered.
+   */
+  double GetLowerBound() const { return lower_bound_; }
+  void SetLowerBound(double lower_bound) { lower_bound_ = lower_bound; }
+
+  /**
    * Getter for all generic costs.
    */
   const std::vector<Binding<Cost>>& generic_costs() const {
@@ -2120,6 +2127,7 @@ class MathematicalProgram {
   SolverType solver_type_;
   int solver_result_;
   double optimal_cost_;
+  double lower_bound_;
   std::map<SolverType, std::map<std::string, double>> solver_options_double_;
   std::map<SolverType, std::map<std::string, int>> solver_options_int_;
   std::map<SolverType, std::map<std::string, std::string>> solver_options_str_;
