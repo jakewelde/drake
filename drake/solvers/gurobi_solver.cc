@@ -63,7 +63,19 @@ gurobi_callback(GRBmodel *model, void *cbdata, int where, void *usrdata) {
       prog_sol_vector(i) = solver_sol_vector[i];
     }
     callbackInfo->prog->SetDecisionVariableValues(prog_sol_vector);
-    callbackInfo->mip_sol_callback(*(callbackInfo->prog), callbackInfo->mip_node_callback_usrdata);
+  
+    GurobiSolver::SolveStatusInfo solve_status;
+    GRBcbget(cbdata, where, GRB_CB_RUNTIME, &(solve_status.reported_runtime));
+    GRBcbget(cbdata, where, GRB_CB_MIPSOL_OBJ, &(solve_status.current_objective));
+    GRBcbget(cbdata, where, GRB_CB_MIPSOL_OBJBST, &(solve_status.best_objective));
+    GRBcbget(cbdata, where, GRB_CB_MIPSOL_OBJBND, &(solve_status.best_bound));
+    GRBcbget(cbdata, where, GRB_CB_MIPSOL_SOLCNT, &(solve_status.feasible_solutions_count));
+    // This expects a double, so...
+    double explored_node_count_dbl;
+    GRBcbget(cbdata, where, GRB_CB_MIPSOL_NODCNT, &explored_node_count_dbl); 
+    solve_status.explored_node_count = explored_node_count_dbl;
+
+    callbackInfo->mip_sol_callback(*(callbackInfo->prog), solve_status, callbackInfo->mip_node_callback_usrdata);
 
   } else if (where == GRB_CB_MIPNODE) {
     int sol_status;
@@ -91,7 +103,19 @@ gurobi_callback(GRBmodel *model, void *cbdata, int where, void *usrdata) {
       
       Eigen::VectorXd vals; 
       VectorXDecisionVariable vars;
-      callbackInfo->mip_node_callback(*(callbackInfo->prog), callbackInfo->mip_node_callback_usrdata, vals, vars);
+      
+      GurobiSolver::SolveStatusInfo solve_status;
+      GRBcbget(cbdata, where, GRB_CB_RUNTIME, &(solve_status.reported_runtime));
+      solve_status.current_objective = -1.0;
+      GRBcbget(cbdata, where, GRB_CB_MIPNODE_OBJBST, &(solve_status.best_objective));
+      GRBcbget(cbdata, where, GRB_CB_MIPNODE_OBJBND, &(solve_status.best_bound));
+      GRBcbget(cbdata, where, GRB_CB_MIPNODE_SOLCNT, &(solve_status.feasible_solutions_count));
+      // This expects a double, so...
+      double explored_node_count_dbl;
+      GRBcbget(cbdata, where, GRB_CB_MIPNODE_NODCNT, &explored_node_count_dbl); 
+      solve_status.explored_node_count = explored_node_count_dbl;
+
+      callbackInfo->mip_node_callback(*(callbackInfo->prog), solve_status, callbackInfo->mip_node_callback_usrdata, vals, vars);
 
       // The callback may return an assignment of some number of variables as a new
       // heuristic solution seed. If so, feed those back to Gurobi.
@@ -752,10 +776,16 @@ SolutionResult GurobiSolver::Solve(MathematicalProgram& prog) const {
       double optimal_cost = std::numeric_limits<double>::quiet_NaN();
       GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &optimal_cost);
       prog.SetOptimalCost(optimal_cost);
+
+      double lower_bound = std::numeric_limits<double>::quiet_NaN();
+      GRBgetdblattr(model, GRB_DBL_ATTR_OBJBOUND, &lower_bound);
+      prog.SetLowerBound(lower_bound);
+
     }
   }
 
   prog.SetSolverResult(solver_type(), error);
+
 
   GRBfreemodel(model);
   GRBfreeenv(env);
