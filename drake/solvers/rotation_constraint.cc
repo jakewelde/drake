@@ -558,6 +558,239 @@ void ComputeInnerFacetsForBoxSphereIntersection(
     }
   }
 }
+
+void AddMcCormickVectorConstraintsWithBox(
+    MathematicalProgram* prog, const VectorDecisionVariable<3>& v,
+    const Eigen::Ref<const Eigen::Vector3d>& box_min,
+    const Eigen::Ref<const Eigen::Vector3d>& box_max,
+    const VectorDecisionVariable<3>& this_cpos,
+    const VectorDecisionVariable<3>& this_cneg,
+    const VectorDecisionVariable<3>& v1,
+    const VectorDecisionVariable<3>& v2) {
+  const double box_min_norm = box_min.lpNorm<2>();
+  const double box_max_norm = box_max.lpNorm<2>();
+  if (box_min_norm <= 1.0 + 2 * numeric_limits<double>::epsilon() &&
+      box_max_norm >= 1.0 - 2 * numeric_limits<double>::epsilon()) {
+    // The box intersects with the surface of the unit sphere.
+    // Two possible cases
+    // 1. If the box bmin <= x <= bmax intersects with the surface of the
+    // unit sphere at a unique point (either bmin or bmax),
+    // 2. Otherwise, there is a region of intersection.
+
+    // We choose the error as 2 * eps here. The reason is that
+    // if x.norm() == 1, then another vector y which is different from
+    // x by eps (y(i) = x(i) + eps), the norm of y is at most 1 + 2 * eps.
+    if (std::abs(box_min_norm - 1.0) <
+        2 * numeric_limits<double>::epsilon() ||
+        std::abs(box_max_norm - 1.0) <
+            2 * numeric_limits<double>::epsilon()) {
+      // If box_min or box_max is on the sphere, then denote the point on
+      // the sphere as u, we have the following condition
+      // if c[xi](0) = 1 and c[yi](1) == 1 and c[zi](2) == 1, then
+      //     v = u
+      //     vᵀ * v1 = 0
+      //     vᵀ * v2 = 0
+      //     v.cross(v1) = v2
+      // Translate this to constraint, we have
+      //   2 * (c[xi](0) + c[yi](1) + c[zi](2)) - 6
+      //       <= v - u <= -2 * (c[xi](0) + c[yi](1) + c[zi](2)) + 6
+      //
+      //   c[xi](0) + c[yi](1) + c[zi](2) - 3
+      //       <= vᵀ * v1 <= 3 - (c[xi](0) + c[yi](1) + c[zi](2))
+      //
+      //   c[xi](0) + c[yi](1) + c[zi](2) - 3
+      //       <= vᵀ * v2 <= 3 - (c[xi](0) + c[yi](1) + c[zi](2))
+      //
+      //   2 * c[xi](0) + c[yi](1) + c[zi](2) - 6
+      //       <= v.cross(v1) - v2 <= 6 - 2 * (c[xi](0) + c[yi](1) +
+      //       c[zi](2))
+      Eigen::Vector3d unique_intersection;  // `u` in the documentation
+      // above
+      if (std::abs(box_min_norm - 1.0) <
+          2 * numeric_limits<double>::epsilon()) {
+        unique_intersection = box_min / box_min_norm;
+      } else {
+        unique_intersection = box_max / box_max_norm;
+      }
+      Eigen::Vector3d orthant_u;
+      VectorDecisionVariable<3> orthant_c;
+      for (int o = 0; o < 8; o++) {  // iterate over orthants
+        orthant_u = FlipVector(unique_intersection, o);
+        orthant_c = PickPermutation(this_cpos, this_cneg, o);
+
+        // TODO(hongkai.dai): remove this for loop when we can handle
+        // Eigen::Array of symbolic formulae.
+        Expression orthant_c_sum = orthant_c.cast<Expression>().sum();
+        for (int i = 0; i < 3; ++i) {
+          prog->AddLinearConstraint(v(i) - orthant_u(i) <=
+              6 - 2 * orthant_c_sum);
+          prog->AddLinearConstraint(v(i) - orthant_u(i) >=
+              2 * orthant_c_sum - 6);
+        }
+        const Expression v_dot_v1 = orthant_u.dot(v1);
+        const Expression v_dot_v2 = orthant_u.dot(v2);
+        prog->AddLinearConstraint(v_dot_v1 <= 3 - orthant_c_sum);
+        prog->AddLinearConstraint(orthant_c_sum - 3 <= v_dot_v1);
+        prog->AddLinearConstraint(v_dot_v2 <= 3 - orthant_c_sum);
+        prog->AddLinearConstraint(orthant_c_sum - 3 <= v_dot_v2);
+        const Vector3<Expression> v_cross_v1 = orthant_u.cross(v1);
+        for (int i = 0; i < 3; ++i) {
+          prog->AddLinearConstraint(v_cross_v1(i) - v2(i) <=
+              6 - 2 * orthant_c_sum);
+          prog->AddLinearConstraint(v_cross_v1(i) - v2(i) >=
+              2 * orthant_c_sum - 6);
+        }
+      }
+    } else {
+      // Find the intercepts of the unit sphere with the box, then find
+      // the tightest linear constraint of the form:
+      //    d <= n'*v
+      // that puts v inside (but as close as possible to) the unit circle.
+      auto pts = internal::ComputeBoxEdgesAndSphereIntersection(box_min,
+                                                                box_max);
+      DRAKE_DEMAND(pts.size() >= 3);
+
+      double d(0);
+      Eigen::Vector3d normal{};
+      internal::ComputeHalfSpaceRelaxationForBoxSphereIntersection(
+          pts, &normal, &d);
+
+      Eigen::VectorXd b(0);
+      Eigen::Matrix<double, Eigen::Dynamic, 3> A(0, 3);
+
+      internal::ComputeInnerFacetsForBoxSphereIntersection(pts, &A, &b);
+
+      // theta is the maximal angle between v and normal, where v is an
+      // intersecting point between the box and the sphere.
+      double cos_theta = d;
+      const double theta = std::acos(cos_theta);
+
+      Eigen::Matrix<double, 1, 6> a;
+      Eigen::Matrix<double, 3, 9> A_cross;
+
+      Eigen::RowVector3d orthant_normal;
+      VectorDecisionVariable<3> orthant_c;
+      for (int o = 0; o < 8; o++) {  // iterate over orthants
+        orthant_normal = FlipVector(normal, o).transpose();
+        orthant_c = PickPermutation(this_cpos, this_cneg, o);
+
+        for (int i = 0; i < A.rows(); ++i) {
+          // Add the constraint that A * v <= b, representing the inner
+          // facets f the convex hull, obtained from the vertices of the
+          // intersection region.
+          // This constraint is only active if the box is active.
+          // We impose the constraint
+          // A.row(i) * v - b(i) <= 3 - 3 * b(i) + (b(i) - 1) * (c[xi](0)
+          // + c[yi](1) + c[zi](2))
+          // Or in words
+          // If c[xi](0) = 1 and c[yi](1) = 1 and c[zi](1) = 1
+          //   A.row(i) * v <= b(i)
+          // Otherwise
+          //   A.row(i) * v -b(i) is not constrained
+          Eigen::Vector3d orthant_a =
+              -FlipVector(-A.row(i).transpose(), o);
+          prog->AddLinearConstraint(
+              orthant_a.dot(v) - b(i) <=
+                  3 - 3 * b(i) +
+                      (b(i) - 1) *
+                          orthant_c.cast<symbolic::Expression>().sum());
+        }
+
+        // Max vector norm constraint: -1 <= normal'*x <= 1.
+        // No need to restrict to this orthant, but also no need to apply
+        // the same constraint twice (would be the same for opposite
+        // orthants), so skip all of the -x orthants.
+        if (o % 2 == 0)
+          prog->AddLinearConstraint(orthant_normal, -1, 1, v);
+
+        // Dot-product constraint: ideally v.dot(v1) = v.dot(v2) = 0.
+        // The cone of (unit) vectors within theta of the normal vector
+        // defines a band of admissible vectors v1 and v2 which are
+        // orthogonal to v.  They must satisfy the constraint:
+        //    -sin(theta) <= normal.dot(vi) <= sin(theta)
+        // Proof sketch:
+        //   v is within theta of normal.
+        //   => vi must be within theta of a vector orthogonal to
+        //      the normal.
+        //   => vi must be pi/2 +/- theta from the normal.
+        //   => |normal||vi| cos(pi/2 + theta) <= normal.dot(vi) <=
+        //                |normal||vi| cos(pi/2 - theta).
+        // Since normal and vi are both unit length,
+        //     -sin(theta) <= normal.dot(vi) <= sin(theta).
+        // To activate this only when this box is active, we use
+        //   -sin(theta)-6+2*c[xi](0)+2*c[yi](1)+2*c[zi](2) <=
+        //   normal.dot(vi)
+        //     normal.dot(vi) <=
+        //     sin(theta)+6-2*c[xi](0)-2*c[yi](1)-2*c[zi](2).
+        // Note: (An alternative tighter, but SOCP constraint)
+        //   v, v1, v2 forms an orthornormal basis. So n'*v is the
+        //   projection of n in the v direction, same for n'*v1, n'*v2.
+        //   Thus
+        //     (n'*v)^2 + (n'*v1)^2 + (n'*v2)^2 = n'*n
+        //   which translates to "The norm of a vector is equal to the
+        //   sum of squares of the vector projected onto each axes of an
+        //   orthornormal basis".
+        //   This equation is the same as
+        //     (n'*v1)^2 + (n'*v2)^2 <= sin(theta)^2
+        //   So actually instead of imposing
+        //     -sin(theta)<=n'*vi <=sin(theta),
+        //   we can impose a tighter Lorentz cone constraint
+        //     [|sin(theta)|, n'*v1, n'*v2] is in the Lorentz cone.
+        a << orthant_normal, -2, -2, -2;
+        prog->AddLinearConstraint(a, -sin(theta) - 6, 1, {v1, orthant_c});
+        prog->AddLinearConstraint(a, -sin(theta) - 6, 1, {v2, orthant_c});
+
+        a.tail<3>() << 2, 2, 2;
+        prog->AddLinearConstraint(a, -1, sin(theta) + 6, {v1, orthant_c});
+        prog->AddLinearConstraint(a, -1, sin(theta) + 6, {v2, orthant_c});
+
+        // Cross-product constraint: ideally v2 = v.cross(v1).
+        // Since v is within theta of normal, we will prove that
+        // |v2 - normal.cross(v1)| <= 2 * sin(theta / 2)
+        // Notice that (v2 - normal.cross(v1))ᵀ * (v2 - normal.cross(v1))
+        // = v2ᵀ * v2 + (normal.cross(v1))ᵀ * (normal.cross(v1)) -
+        //      2 * v2ᵀ * (normal.cross(v1))
+        // <= 1 + 1 - 2 * cos(theta)
+        // = (2 * sin(theta / 2))²
+        // Thus we get |v2 - normal.cross(v1)| <= 2 * sin(theta / 2)
+        // Here we consider to use an elementwise linear constraint
+        // -2*sin(theta / 2) <=  v2 - normal.cross(v1) <= 2*sin(theta / 2)
+        // Since 0<=theta<=pi/2, this should be enough to rule out the
+        // det(R)=-1 case (the shortest projection of a line across the
+        // circle onto a single axis has length 2sqrt(3)/3 > 1.15), and
+        // can be significantly tighter.
+
+        // To activate this only when the box is active, the complete
+        // constraints are
+        //  -2*sin(theta/2)-6+2(cxi+cyi+czi) <= v2-normal.cross(v1)
+        //    v2-normal.cross(v1) <= 2*sin(theta/2)+6-2(cxi+cyi+czi)
+        // Note: Again this constraint could be tighter as a Lorenz cone
+        // constraint of the form:
+        //   |v2 - normal.cross(v1)| <= 2*sin(theta/2).
+        A_cross << Eigen::Matrix3d::Identity(),
+            -math::VectorToSkewSymmetric(orthant_normal),
+            Eigen::Matrix3d::Constant(-2);
+        prog->AddLinearConstraint(
+            A_cross, Eigen::Vector3d::Constant(-2 * sin(theta / 2) - 6),
+            Eigen::Vector3d::Constant(2), {v2, v1, orthant_c});
+
+        A_cross.rightCols<3>() = Eigen::Matrix3d::Constant(2.0);
+        prog->AddLinearConstraint(
+            A_cross, Eigen::Vector3d::Constant(-2),
+            Eigen::Vector3d::Constant(2 * sin(theta / 2) + 6),
+            {v2, v1, orthant_c});
+      }
+    }
+  } else {
+    // This box does not intersect with the surface of the sphere.
+    for (int o = 0; o < 8; ++o) {  // iterate over orthants
+      prog->AddLinearConstraint(PickPermutation(this_cpos, this_cneg, o)
+                                    .cast<Expression>()
+                                    .sum(),
+                                0.0, 2.0);
+    }
+  }
+}
 }  // namespace internal
 
 namespace {
@@ -585,229 +818,7 @@ void AddMcCormickVectorConstraints(
         this_cpos << cpos[xi](0), cpos[yi](1), cpos[zi](2);
         this_cneg << cneg[xi](0), cneg[yi](1), cneg[zi](2);
 
-        const double box_min_norm = box_min.lpNorm<2>();
-        const double box_max_norm = box_max.lpNorm<2>();
-        if (box_min_norm <= 1.0 + 2 * numeric_limits<double>::epsilon() &&
-            box_max_norm >= 1.0 - 2 * numeric_limits<double>::epsilon()) {
-          // The box intersects with the surface of the unit sphere.
-          // Two possible cases
-          // 1. If the box bmin <= x <= bmax intersects with the surface of the
-          // unit sphere at a unique point (either bmin or bmax),
-          // 2. Otherwise, there is a region of intersection.
-
-          // We choose the error as 2 * eps here. The reason is that
-          // if x.norm() == 1, then another vector y which is different from
-          // x by eps (y(i) = x(i) + eps), the norm of y is at most 1 + 2 * eps.
-          if (std::abs(box_min_norm - 1.0) <
-                  2 * numeric_limits<double>::epsilon() ||
-              std::abs(box_max_norm - 1.0) <
-                  2 * numeric_limits<double>::epsilon()) {
-            // If box_min or box_max is on the sphere, then denote the point on
-            // the sphere as u, we have the following condition
-            // if c[xi](0) = 1 and c[yi](1) == 1 and c[zi](2) == 1, then
-            //     v = u
-            //     vᵀ * v1 = 0
-            //     vᵀ * v2 = 0
-            //     v.cross(v1) = v2
-            // Translate this to constraint, we have
-            //   2 * (c[xi](0) + c[yi](1) + c[zi](2)) - 6
-            //       <= v - u <= -2 * (c[xi](0) + c[yi](1) + c[zi](2)) + 6
-            //
-            //   c[xi](0) + c[yi](1) + c[zi](2) - 3
-            //       <= vᵀ * v1 <= 3 - (c[xi](0) + c[yi](1) + c[zi](2))
-            //
-            //   c[xi](0) + c[yi](1) + c[zi](2) - 3
-            //       <= vᵀ * v2 <= 3 - (c[xi](0) + c[yi](1) + c[zi](2))
-            //
-            //   2 * c[xi](0) + c[yi](1) + c[zi](2) - 6
-            //       <= v.cross(v1) - v2 <= 6 - 2 * (c[xi](0) + c[yi](1) +
-            //       c[zi](2))
-            Eigen::Vector3d unique_intersection;  // `u` in the documentation
-                                                  // above
-            if (std::abs(box_min_norm - 1.0) <
-                2 * numeric_limits<double>::epsilon()) {
-              unique_intersection = box_min / box_min_norm;
-            } else {
-              unique_intersection = box_max / box_max_norm;
-            }
-            Eigen::Vector3d orthant_u;
-            VectorDecisionVariable<3> orthant_c;
-            for (int o = 0; o < 8; o++) {  // iterate over orthants
-              orthant_u = FlipVector(unique_intersection, o);
-              orthant_c = PickPermutation(this_cpos, this_cneg, o);
-
-              // TODO(hongkai.dai): remove this for loop when we can handle
-              // Eigen::Array of symbolic formulae.
-              Expression orthant_c_sum = orthant_c.cast<Expression>().sum();
-              for (int i = 0; i < 3; ++i) {
-                prog->AddLinearConstraint(v(i) - orthant_u(i) <=
-                                          6 - 2 * orthant_c_sum);
-                prog->AddLinearConstraint(v(i) - orthant_u(i) >=
-                                          2 * orthant_c_sum - 6);
-              }
-              const Expression v_dot_v1 = orthant_u.dot(v1);
-              const Expression v_dot_v2 = orthant_u.dot(v2);
-              prog->AddLinearConstraint(v_dot_v1 <= 3 - orthant_c_sum);
-              prog->AddLinearConstraint(orthant_c_sum - 3 <= v_dot_v1);
-              prog->AddLinearConstraint(v_dot_v2 <= 3 - orthant_c_sum);
-              prog->AddLinearConstraint(orthant_c_sum - 3 <= v_dot_v2);
-              const Vector3<Expression> v_cross_v1 = orthant_u.cross(v1);
-              for (int i = 0; i < 3; ++i) {
-                prog->AddLinearConstraint(v_cross_v1(i) - v2(i) <=
-                                          6 - 2 * orthant_c_sum);
-                prog->AddLinearConstraint(v_cross_v1(i) - v2(i) >=
-                                          2 * orthant_c_sum - 6);
-              }
-            }
-          } else {
-            // Find the intercepts of the unit sphere with the box, then find
-            // the tightest linear constraint of the form:
-            //    d <= n'*v
-            // that puts v inside (but as close as possible to) the unit circle.
-            auto pts = internal::ComputeBoxEdgesAndSphereIntersection(box_min,
-                                                                      box_max);
-            DRAKE_DEMAND(pts.size() >= 3);
-
-            double d(0);
-            Eigen::Vector3d normal{};
-            internal::ComputeHalfSpaceRelaxationForBoxSphereIntersection(
-                pts, &normal, &d);
-
-            Eigen::VectorXd b(0);
-            Eigen::Matrix<double, Eigen::Dynamic, 3> A(0, 3);
-
-            internal::ComputeInnerFacetsForBoxSphereIntersection(pts, &A, &b);
-
-            // theta is the maximal angle between v and normal, where v is an
-            // intersecting point between the box and the sphere.
-            double cos_theta = d;
-            const double theta = std::acos(cos_theta);
-
-            Eigen::Matrix<double, 1, 6> a;
-            Eigen::Matrix<double, 3, 9> A_cross;
-
-            Eigen::RowVector3d orthant_normal;
-            VectorDecisionVariable<3> orthant_c;
-            for (int o = 0; o < 8; o++) {  // iterate over orthants
-              orthant_normal = FlipVector(normal, o).transpose();
-              orthant_c = PickPermutation(this_cpos, this_cneg, o);
-
-              for (int i = 0; i < A.rows(); ++i) {
-                // Add the constraint that A * v <= b, representing the inner
-                // facets f the convex hull, obtained from the vertices of the
-                // intersection region.
-                // This constraint is only active if the box is active.
-                // We impose the constraint
-                // A.row(i) * v - b(i) <= 3 - 3 * b(i) + (b(i) - 1) * (c[xi](0)
-                // + c[yi](1) + c[zi](2))
-                // Or in words
-                // If c[xi](0) = 1 and c[yi](1) = 1 and c[zi](1) = 1
-                //   A.row(i) * v <= b(i)
-                // Otherwise
-                //   A.row(i) * v -b(i) is not constrained
-                Eigen::Vector3d orthant_a =
-                    -FlipVector(-A.row(i).transpose(), o);
-                prog->AddLinearConstraint(
-                    orthant_a.dot(v) - b(i) <=
-                    3 - 3 * b(i) +
-                        (b(i) - 1) *
-                            orthant_c.cast<symbolic::Expression>().sum());
-              }
-
-              // Max vector norm constraint: -1 <= normal'*x <= 1.
-              // No need to restrict to this orthant, but also no need to apply
-              // the same constraint twice (would be the same for opposite
-              // orthants), so skip all of the -x orthants.
-              if (o % 2 == 0)
-                prog->AddLinearConstraint(orthant_normal, -1, 1, v);
-
-              // Dot-product constraint: ideally v.dot(v1) = v.dot(v2) = 0.
-              // The cone of (unit) vectors within theta of the normal vector
-              // defines a band of admissible vectors v1 and v2 which are
-              // orthogonal to v.  They must satisfy the constraint:
-              //    -sin(theta) <= normal.dot(vi) <= sin(theta)
-              // Proof sketch:
-              //   v is within theta of normal.
-              //   => vi must be within theta of a vector orthogonal to
-              //      the normal.
-              //   => vi must be pi/2 +/- theta from the normal.
-              //   => |normal||vi| cos(pi/2 + theta) <= normal.dot(vi) <=
-              //                |normal||vi| cos(pi/2 - theta).
-              // Since normal and vi are both unit length,
-              //     -sin(theta) <= normal.dot(vi) <= sin(theta).
-              // To activate this only when this box is active, we use
-              //   -sin(theta)-6+2*c[xi](0)+2*c[yi](1)+2*c[zi](2) <=
-              //   normal.dot(vi)
-              //     normal.dot(vi) <=
-              //     sin(theta)+6-2*c[xi](0)-2*c[yi](1)-2*c[zi](2).
-              // Note: (An alternative tighter, but SOCP constraint)
-              //   v, v1, v2 forms an orthornormal basis. So n'*v is the
-              //   projection of n in the v direction, same for n'*v1, n'*v2.
-              //   Thus
-              //     (n'*v)^2 + (n'*v1)^2 + (n'*v2)^2 = n'*n
-              //   which translates to "The norm of a vector is equal to the
-              //   sum of squares of the vector projected onto each axes of an
-              //   orthornormal basis".
-              //   This equation is the same as
-              //     (n'*v1)^2 + (n'*v2)^2 <= sin(theta)^2
-              //   So actually instead of imposing
-              //     -sin(theta)<=n'*vi <=sin(theta),
-              //   we can impose a tighter Lorentz cone constraint
-              //     [|sin(theta)|, n'*v1, n'*v2] is in the Lorentz cone.
-              a << orthant_normal, -2, -2, -2;
-              prog->AddLinearConstraint(a, -sin(theta) - 6, 1, {v1, orthant_c});
-              prog->AddLinearConstraint(a, -sin(theta) - 6, 1, {v2, orthant_c});
-
-              a.tail<3>() << 2, 2, 2;
-              prog->AddLinearConstraint(a, -1, sin(theta) + 6, {v1, orthant_c});
-              prog->AddLinearConstraint(a, -1, sin(theta) + 6, {v2, orthant_c});
-
-              // Cross-product constraint: ideally v2 = v.cross(v1).
-              // Since v is within theta of normal, we will prove that
-              // |v2 - normal.cross(v1)| <= 2 * sin(theta / 2)
-              // Notice that (v2 - normal.cross(v1))ᵀ * (v2 - normal.cross(v1))
-              // = v2ᵀ * v2 + (normal.cross(v1))ᵀ * (normal.cross(v1)) -
-              //      2 * v2ᵀ * (normal.cross(v1))
-              // <= 1 + 1 - 2 * cos(theta)
-              // = (2 * sin(theta / 2))²
-              // Thus we get |v2 - normal.cross(v1)| <= 2 * sin(theta / 2)
-              // Here we consider to use an elementwise linear constraint
-              // -2*sin(theta / 2) <=  v2 - normal.cross(v1) <= 2*sin(theta / 2)
-              // Since 0<=theta<=pi/2, this should be enough to rule out the
-              // det(R)=-1 case (the shortest projection of a line across the
-              // circle onto a single axis has length 2sqrt(3)/3 > 1.15), and
-              // can be significantly tighter.
-
-              // To activate this only when the box is active, the complete
-              // constraints are
-              //  -2*sin(theta/2)-6+2(cxi+cyi+czi) <= v2-normal.cross(v1)
-              //    v2-normal.cross(v1) <= 2*sin(theta/2)+6-2(cxi+cyi+czi)
-              // Note: Again this constraint could be tighter as a Lorenz cone
-              // constraint of the form:
-              //   |v2 - normal.cross(v1)| <= 2*sin(theta/2).
-              A_cross << Eigen::Matrix3d::Identity(),
-                  -math::VectorToSkewSymmetric(orthant_normal),
-                  Eigen::Matrix3d::Constant(-2);
-              prog->AddLinearConstraint(
-                  A_cross, Eigen::Vector3d::Constant(-2 * sin(theta / 2) - 6),
-                  Eigen::Vector3d::Constant(2), {v2, v1, orthant_c});
-
-              A_cross.rightCols<3>() = Eigen::Matrix3d::Constant(2.0);
-              prog->AddLinearConstraint(
-                  A_cross, Eigen::Vector3d::Constant(-2),
-                  Eigen::Vector3d::Constant(2 * sin(theta / 2) + 6),
-                  {v2, v1, orthant_c});
-            }
-          }
-        } else {
-          // This box does not intersect with the surface of the sphere.
-          for (int o = 0; o < 8; ++o) {  // iterate over orthants
-            prog->AddLinearConstraint(PickPermutation(this_cpos, this_cneg, o)
-                                          .cast<Expression>()
-                                          .sum(),
-                                      0.0, 2.0);
-          }
-        }
+        internal::AddMcCormickVectorConstraintsWithBox(prog, v, box_min, box_max, this_cpos, this_cneg, v1, v2);
       }
     }
   }
