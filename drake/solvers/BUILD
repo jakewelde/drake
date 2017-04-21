@@ -520,23 +520,23 @@ drake_cc_googletest(
 )
 
 # Temporarily disabled because we have no Gurobi license in CI. #5862
-#drake_cc_googletest(
-#    name = "rotation_constraint_test",
-#    size = "medium",
-#    tags = [
-#        "exclusive",
-#        "gurobi",
-#        "local",
-#        "mosek",
-#    ],
-#    deps = [
-#        ":gurobi_solver",
-#        ":mathematical_program",
-#        ":rotation_constraint",
-#        "//drake/common:eigen_matrix_compare",
-#        "//drake/math:geometric_transform",
-#    ],
-#)
+drake_cc_googletest(
+    name = "rotation_constraint_test",
+    size = "medium",
+    tags = [
+        "exclusive",
+        "gurobi",
+        "local",
+        "mosek",
+    ],
+    deps = [
+        ":gurobi_solver",
+        ":mathematical_program",
+        ":rotation_constraint",
+        "//drake/common:eigen_matrix_compare",
+        "//drake/math:geometric_transform",
+    ],
+)
 
 drake_cc_binary(
     name = "plot_feasible_rotation_matrices",
@@ -551,20 +551,20 @@ drake_cc_binary(
 
 # Temporarily disabled because we have no Gurobi license in CI. #5862
 #drake_cc_googletest(
-#    name = "rotation_constraint_limit_test",
-#    size = "large",
-#    tags = [
-#        "exclusive",
-#        "gurobi",
-#        "local",
-#    ],
-#    deps = [
-#        ":gurobi_solver",
-#        ":mathematical_program",
-#        ":rotation_constraint",
-#        "//drake/common:eigen_matrix_compare",
-#    ],
-#)
+    name = "rotation_constraint_limit_test",
+    size = "large",
+    tags = [
+        "exclusive",
+        "gurobi",
+        "local",
+    ],
+    deps = [
+        ":gurobi_solver",
+        ":mathematical_program",
+        ":rotation_constraint",
+        "//drake/common:eigen_matrix_compare",
+    ],
+)
 
 drake_cc_googletest(
     name = "snopt_solver_test",
