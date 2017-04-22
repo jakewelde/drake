@@ -550,7 +550,7 @@ drake_cc_binary(
 )
 
 # Temporarily disabled because we have no Gurobi license in CI. #5862
-#drake_cc_googletest(
+drake_cc_googletest(
     name = "rotation_constraint_limit_test",
     size = "large",
     tags = [

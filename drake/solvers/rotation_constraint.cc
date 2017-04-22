@@ -559,6 +559,19 @@ void ComputeInnerFacetsForBoxSphereIntersection(
   }
 }
 
+/**
+ * Add the McCormick constraint for a unit length vector `v`, if it lies within
+ * a box box_min <= |v| <= box_max. where |v| is the elementwise absolute value
+ * of v.
+ * @param prog The optimization program.
+ * @param v The unit length vector that will be constrained.
+ * @param box_min The vertex closest to the origin.
+ * @param box_max The vertex farthest from the origin.
+ * @param this_cpos this_cpos(i) = 1 => box_min(i) <= v(i) <= box_max(i)
+ * @param this_cneg this_cneg(i) = 1 => box_min(i) <= -v(i) <= box_max(i)
+ * @param v1 Another vector that should be perpendicular to v
+ * @param v2 Another vector that should be perpendicular to v, and v2 = cross(v, v1)
+ */
 void AddMcCormickVectorConstraintsWithBox(
     MathematicalProgram* prog, const VectorDecisionVariable<3>& v,
     const Eigen::Ref<const Eigen::Vector3d>& box_min,
@@ -567,6 +580,8 @@ void AddMcCormickVectorConstraintsWithBox(
     const VectorDecisionVariable<3>& this_cneg,
     const VectorDecisionVariable<3>& v1,
     const VectorDecisionVariable<3>& v2) {
+  DRAKE_DEMAND((box_min.array() >= 0).all());
+  DRAKE_DEMAND((box_max.array() >= box_min.array()).all());
   const double box_min_norm = box_min.lpNorm<2>();
   const double box_max_norm = box_max.lpNorm<2>();
   if (box_min_norm <= 1.0 + 2 * numeric_limits<double>::epsilon() &&
@@ -799,6 +814,8 @@ void AddMcCormickVectorConstraints(
     MathematicalProgram* prog, const VectorDecisionVariable<3>& v,
     const std::vector<MatrixDecisionVariable<3, 1>>& cpos,
     const std::vector<MatrixDecisionVariable<3, 1>>& cneg,
+    const std::vector<VectorDecisionVariable<3>>& bpos,
+    const std::vector<VectorDecisionVariable<3>>& bneg,
     const VectorDecisionVariable<3>& v1, const VectorDecisionVariable<3>& v2) {
   const int N = cpos.size();  // number of discretization points.
 
@@ -818,7 +835,22 @@ void AddMcCormickVectorConstraints(
         this_cpos << cpos[xi](0), cpos[yi](1), cpos[zi](2);
         this_cneg << cneg[xi](0), cneg[yi](1), cneg[zi](2);
 
+        VectorDecisionVariable<3> this_bpos, this_bneg;
+        this_bpos << bpos[xi](0), bpos[yi](1), bpos[zi](2);
+        this_bneg << bneg[xi](0), bneg[yi](1), bneg[zi](2);
+
         internal::AddMcCormickVectorConstraintsWithBox(prog, v, box_min, box_max, this_cpos, this_cneg, v1, v2);
+        if (N > 1) {
+          // If N == 1, then the box_max is [1,1,1].
+          internal::AddMcCormickVectorConstraintsWithBox(prog,
+                                                         v,
+                                                         box_min,
+                                                         Eigen::Vector3d::Ones(),
+                                                         this_bpos,
+                                                         this_bneg,
+                                                         v1,
+                                                         v2);
+        }
       }
     }
   }
@@ -1006,8 +1038,10 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
                                                                limits);
 
   // Add constraints to the column and row vectors.
-  std::vector<MatrixDecisionVariable<3, 1>> cpos(num_binary_vars_per_half_axis),
+  std::vector<VectorDecisionVariable<3>> cpos(num_binary_vars_per_half_axis),
       cneg(num_binary_vars_per_half_axis);
+  std::vector<VectorDecisionVariable<3>> bpos(num_binary_vars_per_half_axis),
+      bneg(num_binary_vars_per_half_axis);
   for (int i = 0; i < 3; i++) {
     // Make lists of the decision variables in terms of column vectors and row
     // vectors to facilitate the calls below.
@@ -1016,15 +1050,19 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     for (int k = 0; k < num_binary_vars_per_half_axis; k++) {
       cpos[k] = CRpos[k].col(i);
       cneg[k] = CRneg[k].col(i);
+      bpos[k] = BRpos[k].col(i);
+      bneg[k] = BRneg[k].col(i);
     }
-    AddMcCormickVectorConstraints(prog, R.col(i), cpos, cneg,
+    AddMcCormickVectorConstraints(prog, R.col(i), cpos, cneg, bpos, bneg,
                                   R.col((i + 1) % 3), R.col((i + 2) % 3));
 
     for (int k = 0; k < num_binary_vars_per_half_axis; k++) {
       cpos[k] = CRpos[k].row(i).transpose();
       cneg[k] = CRneg[k].row(i).transpose();
+      bpos[k] = BRpos[k].row(i).transpose();
+      bneg[k] = BRneg[k].row(i).transpose();
     }
-    AddMcCormickVectorConstraints(prog, R.row(i).transpose(), cpos, cneg,
+    AddMcCormickVectorConstraints(prog, R.row(i).transpose(), cpos, cneg, bpos, bneg,
                                   R.row((i + 1) % 3).transpose(),
                                   R.row((i + 2) % 3).transpose());
   }
