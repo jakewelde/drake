@@ -840,8 +840,10 @@ void AddMcCormickVectorConstraints(
         this_bneg << bneg[xi](0), bneg[yi](1), bneg[zi](2);
 
         internal::AddMcCormickVectorConstraintsWithBox(prog, v, box_min, box_max, this_cpos, this_cneg, v1, v2);
-        if (N > 1) {
-          // If N == 1, then the box_max is [1,1,1].
+        if (xi == 0 && yi == 0 && zi == 0) {
+          // If we know which orthant the point `v` is in, then we can constrain
+          // `v` to be in the McCormick envelope of that orthant surface, this
+          // can potentially rule out the R = 0 case.
           internal::AddMcCormickVectorConstraintsWithBox(prog,
                                                          v,
                                                          box_min,
