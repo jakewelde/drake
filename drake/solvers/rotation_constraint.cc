@@ -968,8 +968,15 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
         }
       }
       // R(i,j) has to pick a side, either non-positive or non-negative.
-      prog->AddLinearConstraint(BRpos[0](i, j) + BRneg[0](i, j) == 1);
-
+      prog->AddLinearConstraint(BRpos[0](i, j) + BRneg[0](i, j) == 1); 
+      // Any indicator variable of one sign should force all
+      // indicator variables of the opposite sign to be off.
+      for (int k = 0; k < num_binary_vars_per_half_axis; k++) {
+        for (int k_other = 0; k_other < num_binary_vars_per_half_axis; k_other++) {
+          if (k == k_other && k == 0) continue; // Skip the case constrained above.
+          prog->AddLinearConstraint(BRpos[k](i, j) + BRneg[k](i, j) <= 1);
+        }
+      }
       // for debugging: constrain to positive orthant.
       //      prog->AddBoundingBoxConstraint(1,1,{BRpos[0].block<1,1>(i,j)});
     }
