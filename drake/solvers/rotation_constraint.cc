@@ -17,6 +17,29 @@ using drake::symbolic::Expression;
 namespace drake {
 namespace solvers {
 
+namespace internal {
+  MatrixXi CalculateReflectedGrayCodes(int k){
+    int num_codes = k == 0 ? 0 : 1 << k;
+    MatrixXi return_codes(num_codes, k);
+    return_codes.setZero();
+    for (int i = 0; i < num_codes; i++) {
+      for (int j = 0; j < k; j++) {
+        // The jth digit cycles
+        // 2^j times off, then 2^j times on.
+        // The jth digit goes through a quarter-period
+        // (2^j / 2) off first.
+        int quarter_period_time = 1 << (j);
+        int half_period_time = 2 << (j);
+        int full_period_time = 4 << (j);
+        if ((i + quarter_period_time) % full_period_time >= half_period_time) {
+          return_codes(i, j) = 1;
+        }
+      }
+    }
+    return return_codes;
+  }
+}
+
 MatrixDecisionVariable<3, 3> NewRotationMatrixVars(MathematicalProgram* prog,
                                                    const std::string& name) {
   MatrixDecisionVariable<3, 3> R = prog->NewContinuousVariables<3, 3>(name);
