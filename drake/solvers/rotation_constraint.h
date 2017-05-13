@@ -91,8 +91,8 @@ void AddRotationMatrixOrthonormalSocpConstraint(
     const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R);
 
 using AddRotationMatrixMcCormickEnvelopeReturnType =
-std::tuple<std::vector<MatrixDecisionVariable<3, 3>>,
-           std::vector<MatrixDecisionVariable<3, 3>>,
+std::tuple<std::vector<Eigen::Matrix<drake::symbolic::Expression, 3, 3>>,
+           std::vector<Eigen::Matrix<drake::symbolic::Expression, 3, 3>>,
            std::vector<MatrixDecisionVariable<3, 3>>,
            std::vector<MatrixDecisionVariable<3, 3>>>;
 /**
