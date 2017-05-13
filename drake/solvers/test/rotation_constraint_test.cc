@@ -38,6 +38,22 @@ void AddObjective(MathematicalProgram* prog,
   prog->AddCost(sigma(0));
 }
 
+GTEST_TEST(RotationTest, TestGrayCode) {
+  for (int i = 0; i < 4; i++) {
+    Eigen::MatrixXi test_code = drake::solvers::internal::CalculateReflectedGrayCodes(i);
+
+    // Asking for codes for 0 bits should generate 0 for 0 bits.
+    // Asking for codes for i bits should generate 2^(i) codes for i bits.
+    EXPECT_EQ(test_code.cols(), i);
+    EXPECT_EQ(test_code.rows(), i == 0 ? 0 : 1 << i);
+
+    // Each code should differ by only one bit from the previous code.
+    for (int j = 1; j < test_code.rows(); j ++) {
+      EXPECT_EQ((test_code.row(j) - test_code.row(j - 1)).cwiseAbs().sum(), 1);
+    }
+  }
+}
+
 // Iterates over possible setting of the RPY limits flag, and for each setting
 // evaluates a mesh of points within those limits.  This test confirms that
 // of the rotation matrices generated from rotations with those limits are
@@ -635,8 +651,8 @@ class TestMcCormickCorner
  protected:
   MathematicalProgram prog_;
   MatrixDecisionVariable<3, 3> R_;
-  std::vector<MatrixDecisionVariable<3, 3>> Cpos_;
-  std::vector<MatrixDecisionVariable<3, 3>> Cneg_;
+  std::vector<Eigen::Matrix<drake::symbolic::Expression, 3, 3>> Cpos_;
+  std::vector<Eigen::Matrix<drake::symbolic::Expression, 3, 3>> Cneg_;
   int orthant_;  // Index of the orthant that R_.col(col_idx_) is in.
   bool is_bmin_;  // If true, then the box bmin <= x <= bmax intersects with the
                   // surface of the unit sphere at the unique point bmin;
@@ -675,25 +691,35 @@ TEST_P(TestMcCormickCorner, TestOrthogonal) {
 
   // orthant_C[i](j) is either Cpos[i](j, col_idx_) or Cneg[i](j, col_idx_),
   // depending on the orthant.
-  std::array<VectorDecisionVariable<3>, 3> orthant_C;
+  std::array<Eigen::Matrix<drake::symbolic::Expression, 3, 1>, 3> orthant_C;
 
   for (int i = 0; i < 3; ++i) {
     for (int axis = 0; axis < 3; ++axis) {
       if (orthant_ & 1 << axis) {
-        orthant_C[i](axis) = Cneg_[i](axis, col_idx_);
+        orthant_C[i][axis] = Cneg_[i](axis, col_idx_);
       } else {
-        orthant_C[i](axis) = Cpos_[i](axis, col_idx_);
+        orthant_C[i][axis] = Cpos_[i](axis, col_idx_);
       }
     }
   }
   if (is_bmin_) {
-    prog_.AddBoundingBoxConstraint(1, 1, orthant_C[1](0));
-    prog_.AddBoundingBoxConstraint(1, 1, orthant_C[2](1));
-    prog_.AddBoundingBoxConstraint(1, 1, orthant_C[2](2));
+    prog_.AddLinearConstraint(1 <= orthant_C[1](0));
+    prog_.AddLinearConstraint(orthant_C[1](0) <= 1);
+
+    prog_.AddLinearConstraint(1 <= orthant_C[2](1));
+    prog_.AddLinearConstraint(orthant_C[2](1) <= 1);
+
+    prog_.AddLinearConstraint(1 <= orthant_C[2](2));
+    prog_.AddLinearConstraint(orthant_C[2](2) <= 1);
   } else {
-    prog_.AddBoundingBoxConstraint(1, 1, orthant_C[0](0));
-    prog_.AddBoundingBoxConstraint(1, 1, orthant_C[1](1));
-    prog_.AddBoundingBoxConstraint(1, 1, orthant_C[1](2));
+    prog_.AddLinearConstraint(1 <= orthant_C[0](0));
+    prog_.AddLinearConstraint(orthant_C[0](0) <= 1);
+
+    prog_.AddLinearConstraint(1 <= orthant_C[1](1));
+    prog_.AddLinearConstraint(orthant_C[1](1) <= 1);
+
+    prog_.AddLinearConstraint(1 <= orthant_C[1](2));
+    prog_.AddLinearConstraint(orthant_C[1](2) <= 1);
   }
 
   // Add a cost function to try to make the column of R not perpendicular.
