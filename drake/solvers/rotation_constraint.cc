@@ -1181,5 +1181,80 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
   return make_tuple(CRpos, CRneg, BRpos, BRneg);
 }
 
+symbolic::Variable GetOrConstructBilinearApproxTerm(
+    MathematicalProgram* prog,
+    std::map<std::pair<size_t, size_t>, symbolic::Variable> bilinear_approx_terms,
+    symbolic::Variable x, symbolic::Variable y,
+    int num_bins_per_bilinear_term){
+
+  std::pair<size_t, size_t> bilinear_term_ids(x.get_hash(), y.get_hash());
+  auto iter = bilinear_approx_terms.find(bilinear_term_ids);
+  if (iter == bilinear_approx_terms.end()){
+    // If we didn't find this term already, go make a new approximation of
+    // it, and store it in our bilinear term storage.
+    auto w = prog->NewContinuousVariables<1>("w_" + x.get_name() + "_" + y.get_name());
+    prog->AddBoundingBoxConstraint(-1., 1., w);
+    Add2DLogarithmicMcCormickEnvelope(prog, w[0], x, y, w[0].get_name(), -1., 1., -1., 1.,
+    num_bins_per_bilinear_term, num_bins_per_bilinear_term);
+    bilinear_approx_terms[bilinear_term_ids] = w[0];
+    iter = bilinear_approx_terms.find(bilinear_term_ids);
+    DRAKE_ASSERT(iter != bilinear_approx_terms.end());
+  }
+  return iter->second;
+}
+
+void
+AddRotationMatrix2DLogMcCormickEnvelopeMilpConstraints(
+    MathematicalProgram* prog,
+    const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
+    int num_bins_per_bilinear_term) {
+  DRAKE_DEMAND(num_bins_per_bilinear_term >= 1);
+
+  // Keep track of bilinear approximations we make with a dictionary,
+  // so we don't repeat
+  std::map<
+    std::pair<size_t, size_t>,
+    symbolic::Variable
+  > bilinear_approx_terms;
+
+  // Add constraints that fall out of R^T R = I
+  for (int i = 0; i < 3; i++) {
+    for (int j = i; j < 3; j ++) {
+      VectorDecisionVariable<3> r_a = R.col(i);
+      VectorDecisionVariable<3> r_b = R.col(j);
+      double equals = i == j ? 1. : 0.;
+
+      Expression sum_of_bilinear_terms = 0.0;
+      for (int k = 0; k < 3; k ++) {
+        sum_of_bilinear_terms += GetOrConstructBilinearApproxTerm(prog, bilinear_approx_terms, r_a[k], r_b[k], num_bins_per_bilinear_term);
+      }
+      prog->AddLinearConstraint(sum_of_bilinear_terms == equals);
+    }
+  }
+
+  // And add the additional constraint that r_1 cross r_2 = r_
+  Eigen::Matrix3i skew_sym_index_and_sign;
+  skew_sym_index_and_sign << 0, -3, 2, 3, 0, -1, -2, 1, 0; // Indices are 1-indexed.
+
+  for (int i = 0; i < 3; i++) { // i^{th} row of skew sym matrix times r_2 = r_{3, i}
+    Expression lhs = 0.0;
+    for (int j = 0; j < 3; j++) {
+      if (i != j) { // diagonal terms are all 0
+        int ind = skew_sym_index_and_sign(i, j);
+        DRAKE_ASSERT(ind != 0);
+        auto new_expr = GetOrConstructBilinearApproxTerm(prog, bilinear_approx_terms, 
+            R(abs(ind)-1, 0), 
+            R(j, 1), num_bins_per_bilinear_term);
+        std::cout << "Adding " << (ind / abs(ind)) * new_expr << std::endl;
+        lhs += (ind / abs(ind)) * new_expr;
+        std::cout << "Added!" << std::endl;
+      }
+    }
+    std::cout << "Cross prod constraint says " << lhs << " == " << R(i, 2) << std::endl;
+    prog->AddLinearConstraint(lhs == R(i, 2));
+  }
+  
+}
+
 }  // namespace solvers
 }  // namespace drake

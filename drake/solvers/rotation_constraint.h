@@ -159,5 +159,11 @@ AddRotationMatrixMcCormickEnvelopeMilpConstraints(
     int num_binary_vars_per_half_axis = 2,
     RollPitchYawLimits limits = kNoLimits);
 
+void
+AddRotationMatrix2DLogMcCormickEnvelopeMilpConstraints(
+    MathematicalProgram* prog,
+    const Eigen::Ref<const MatrixDecisionVariable<3, 3>>& R,
+    int num_bins_per_bilinear_term);
+
 }  // namespace solvers
 }  // namespace drake
