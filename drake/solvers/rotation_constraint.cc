@@ -14,6 +14,7 @@
 using std::numeric_limits;
 using drake::symbolic::Expression;
 using Eigen::VectorXd;
+using Eigen::RowVectorXd;
 using Eigen::MatrixXi;
 
 namespace drake {
@@ -39,6 +40,106 @@ namespace internal {
       }
     }
     return return_codes;
+  }
+}
+
+/* 
+   Encode a Special Ordered Set of the 2nd type...
+      i.e., only 2 adjacent members of lambda should
+      be nonzero at a time.
+
+   Given a set of expressions V expressions Lambda,
+   and a set of N binary variables Bin, and a V x N
+   Gray Coding that maps activatings of Bin to nonzero-ness
+   of Lambda.
+
+   Binary variable i being inactive means that 
+
+*/
+void AddSOS2EncodingConstraints(MathematicalProgram* prog,
+    Eigen::Matrix<Expression, Eigen::Dynamic, 1> & lambda,
+    MatrixXDecisionVariable& bin,
+    MatrixXi coding) {
+  for (int i = 0; i < bin.rows(); i++) {
+    Expression lb = coding(0, i) * lambda(0);
+    Expression ub = coding(0, i) * lambda(0);
+    for (int v = 1; v < lambda.rows()-1; v++) {
+      lb += fmin(coding(v, i), coding(v-1, i))*lambda(v);
+      ub += fmax(coding(v, i), coding(v-1, i))*lambda(v);
+    }
+    lb += coding(lambda.rows()-2, i)*lambda(lambda.rows()-1);
+    ub += coding(lambda.rows()-2, i)*lambda(lambda.rows()-1);
+    prog->AddLinearConstraint(lb <= bin(i));
+    prog->AddLinearConstraint(ub >= bin(i));
+  }
+}
+
+void Add2DLogarithmicMcCormickEnvelope(MathematicalProgram* prog, 
+                              drake::symbolic::Variable& w,
+                              drake::symbolic::Variable& x, 
+                              drake::symbolic::Variable& y, 
+                              std::string corename,
+                              double xL, 
+                              double xH, 
+                              double yL, 
+                              double yH, 
+                              int M_x,
+                              int M_y){
+  auto x_bounds = VectorXd::LinSpaced(M_x+1, xL, xH);
+  auto y_bounds = VectorXd::LinSpaced(M_y+1, yL, yH);
+
+  // Disjunction of envelope regions in convex hull form:
+  MatrixXDecisionVariable lambda = prog->NewContinuousVariables(M_x+1, M_y+1, corename + "_lambda");
+  // Lambdas are affine coefficients.
+  prog->AddBoundingBoxConstraint(0., 1., lambda);
+  prog->AddLinearConstraint(
+    RowVectorXd::Ones(M_y+1)*((RowVectorXd::Ones(M_x+1) * lambda).transpose())
+    == VectorXd::Ones(1));
+  
+  // Lambdas dictate affine combination of bounds to generate
+  // values for x and y; and can be used similarly to construct
+  // the approximate value for w = x * y.
+  Expression x_affine_combination = 0.0;
+  Expression y_affine_combination = 0.0;
+  Expression w_affine_combination = 0.0;
+  for (int i = 0; i < M_x+1; i++){
+    for (int j = 0; j < M_y+1; j++){
+      x_affine_combination += lambda(i, j) * x_bounds(i);
+      y_affine_combination += lambda(i, j) * y_bounds(j);
+      w_affine_combination += lambda(i, j) * x_bounds(i) * y_bounds(j);
+    }
+  }
+  prog->AddLinearConstraint(x == x_affine_combination);
+  prog->AddLinearConstraint(y == y_affine_combination);
+  prog->AddLinearConstraint(w == w_affine_combination);
+
+
+  // For each X bin...
+  if (M_x > 1) {
+    // Form an expression that corresponds to what y is selected (by inspecting the lambdas
+    // in this column).
+    Eigen::Matrix<Expression, Eigen::Dynamic, 1> y_col = RowVectorXd::Ones(M_y+1) * lambda.transpose();
+    int k = ceil(log2(M_x));
+    auto coding = internal::CalculateReflectedGrayCodes(k);
+    coding.conservativeResize(M_x, k);
+    // And generate a corresponding number of binary variables indicating membership in
+    // those regions.
+    auto bin = prog->NewBinaryVariables(k, 1, corename + "_x_bin");
+    AddSOS2EncodingConstraints(prog, y_col, bin, coding);
+  }
+
+  // For each Y bin...
+  if (M_y > 1) {
+    // Form an expression that corresponds to what x is selected (by inspecting the lambdas
+    // in this column).
+    Eigen::Matrix<Expression, Eigen::Dynamic, 1> x_col = RowVectorXd::Ones(M_x+1) * lambda;
+    int k = ceil(log2(M_y));
+    auto coding = internal::CalculateReflectedGrayCodes(k);
+    coding.conservativeResize(M_y, k);
+    // And generate a corresponding number of binary variables indicating membership in
+    // those regions.
+    auto bin = prog->NewBinaryVariables(k, 1, corename + "_y_bin");
+    AddSOS2EncodingConstraints(prog, x_col, bin, coding);
   }
 }
 
