@@ -57,6 +57,18 @@ enum RollPitchYawLimitOptions {
 };
 typedef uint32_t RollPitchYawLimits;
 
+void Add2DLogarithmicMcCormickEnvelope(MathematicalProgram* prog, 
+                            drake::symbolic::Variable& w,
+                            drake::symbolic::Variable& x, 
+                            drake::symbolic::Variable& y, 
+                            std::string corename,
+                            double xL, 
+                            double xH, 
+                            double yL, 
+                            double yH, 
+                            int M_x,
+                            int M_y);
+
 /// Applies *very conservative* limits on the entries of R for the cases when
 /// rotations can be limited (for instance, if you want to search over
 /// rotations, but there is an obvious symmetry in the problem so that e.g.
