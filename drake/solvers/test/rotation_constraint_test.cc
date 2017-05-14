@@ -145,6 +145,28 @@ GTEST_TEST(RotationTest, TestLogMccormickEnvelope) {
   printf("Worst error witnessed: %f", worst_error_witness);
   
 }
+
+GTEST_TEST(RotationTest, Test2DLogarithmMcCormick) {
+  MathematicalProgram prog;
+  auto Rvar = NewRotationMatrixVars(&prog);
+  AddRotationMatrix2DLogMcCormickEnvelopeMilpConstraints(
+    &prog, Rvar, 8);
+
+  prog.AddQuadraticCost( (Rvar(0, 0) - 0.75) * (Rvar(0, 0) - 0.75) );
+
+  GurobiSolver gurobi_solver;
+  prog.SetSolverOption(SolverType::kGurobi, "OutputFlag", 1);
+  prog.SetSolverOption(SolverType::kGurobi, "LogToConsole", 1);
+  prog.SetSolverOption(SolverType::kGurobi, "DisplayInterval", 5);
+  auto out = gurobi_solver.Solve(prog);
+  ASSERT_EQ(out, kSolutionFound);
+
+  auto R = prog.GetSolution(Rvar);
+  std::cout << "R found: " << R << std::endl;
+  std::cout << "R^T R: " << R.transpose() * R << std::endl;
+
+}
+
 // Iterates over possible setting of the RPY limits flag, and for each setting
 // evaluates a mesh of points within those limits.  This test confirms that
 // of the rotation matrices generated from rotations with those limits are
