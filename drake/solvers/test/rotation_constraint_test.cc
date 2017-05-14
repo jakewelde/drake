@@ -51,9 +51,100 @@ GTEST_TEST(RotationTest, TestGrayCode) {
     for (int j = 1; j < test_code.rows(); j ++) {
       EXPECT_EQ((test_code.row(j) - test_code.row(j - 1)).cwiseAbs().sum(), 1);
     }
+
+    std::cout << "Codes " << i << " : " << std::endl;
+    std::cout << test_code << std::endl;
   }
 }
 
+GTEST_TEST(RotationTest, TestLogMccormickEnvelope) {
+  double min = -1.0;
+  double max = 1.0;
+  double step = 0.05;
+  int bins_x = 4;
+  int bins_y = 3;
+  double worst_error_witness = 0.0;
+  for (double x_0 = min; x_0 <= max; x_0 += step){
+    for (double x_1 = min; x_1 <= max; x_1 += step){
+      {
+        // First, check that the "correct" solution is feasible:
+        MathematicalProgram prog;
+        auto x = prog.NewContinuousVariables<3>("x");
+        prog.AddQuadraticCost( (x[0] - x_0)*(x[0] - x_0) - x_0*x_0 );
+        prog.AddQuadraticCost( (x[1] - x_1)*(x[1] - x_1) - x_1*x_1 );
+        prog.AddQuadraticCost( (x[2] - x_1*x_0)*(x[2] - x_1*x_0) - x_1*x_0*x_1*x_0 );
+        Add2DLogarithmicMcCormickEnvelope(&prog, x[2], x[0], x[1], "var",
+          -1., 1., -1., 1., bins_x, bins_y);
+
+        GurobiSolver gurobi_solver;
+        prog.SetSolverOption(SolverType::kGurobi, "OutputFlag", 0);
+        prog.SetSolverOption(SolverType::kGurobi, "LogToConsole", 1);
+        prog.SetSolverOption(SolverType::kGurobi, "DisplayInterval", 5);
+        auto out = gurobi_solver.Solve(prog);
+        ASSERT_EQ(out, kSolutionFound);
+
+        Vector3d x_val = prog.GetSolution(x);
+        //printf("%2.2f, %2.2f -> vals %2.2f, %2.2f, %2.2f. Error: %2.2f\n", x_0, x_1, x_val[0], x_val[1], x_val[2], fabs(x_val[2] - (x_0*x_1)));
+        EXPECT_NEAR(x_val[2], x_0*x_1, 1E-4);
+      }
+      {
+        // Then see how low we can make the solution.
+        MathematicalProgram prog;
+        auto x = prog.NewContinuousVariables<3>("x");
+        prog.AddLinearConstraint( x[0] == x_0 );
+        prog.AddLinearConstraint( x[1] == x_1 );
+        prog.AddLinearCost(x[2]);
+        Add2DLogarithmicMcCormickEnvelope(&prog, x[2], x[0], x[1], "var",
+          -1., 1., -1., 1., bins_x, bins_y);
+
+        GurobiSolver gurobi_solver;
+        prog.SetSolverOption(SolverType::kGurobi, "OutputFlag", 0);
+        prog.SetSolverOption(SolverType::kGurobi, "LogToConsole", 1);
+        prog.SetSolverOption(SolverType::kGurobi, "DisplayInterval", 5);
+        auto out = gurobi_solver.Solve(prog);
+        ASSERT_EQ(out, kSolutionFound);
+
+        Vector3d x_val = prog.GetSolution(x);
+        //printf("%2.2f, %2.2f -> vals %2.2f, %2.2f, %2.2f. Error: %2.2f\n", x_0, x_1, x_val[0], x_val[1], x_val[2], fabs(x_val[2] - (x_0*x_1)));
+        EXPECT_NEAR(x_val[2], x_0*x_1, 0.1);
+
+        double err = fabs(x_val[2] - (x_0*x_1));
+        if (err > worst_error_witness)
+          worst_error_witness = err;
+
+      }
+      {
+        // Then see how high we can make the solution.
+        MathematicalProgram prog;
+        auto x = prog.NewContinuousVariables<3>("x");
+        prog.AddLinearConstraint( x[0] == x_0 );
+        prog.AddLinearConstraint( x[1] == x_1 );
+        prog.AddLinearCost(-x[2]);
+        Add2DLogarithmicMcCormickEnvelope(&prog, x[2], x[0], x[1], "var",
+          -1., 1., -1., 1., bins_x, bins_y);
+
+        GurobiSolver gurobi_solver;
+        prog.SetSolverOption(SolverType::kGurobi, "OutputFlag", 0);
+        prog.SetSolverOption(SolverType::kGurobi, "LogToConsole", 1);
+        prog.SetSolverOption(SolverType::kGurobi, "DisplayInterval", 5);
+        auto out = gurobi_solver.Solve(prog);
+        ASSERT_EQ(out, kSolutionFound);
+
+        Vector3d x_val = prog.GetSolution(x);
+        //printf("%2.2f, %2.2f -> vals %2.2f, %2.2f, %2.2f. Error: %2.2f\n", x_0, x_1, x_val[0], x_val[1], x_val[2], fabs(x_val[2] - (x_0*x_1)));
+        EXPECT_NEAR(x_val[2], x_0*x_1, 0.1);
+
+        double err = fabs(x_val[2] - (x_0*x_1));
+        if (err > worst_error_witness)
+          worst_error_witness = err;
+      }
+
+    }
+  }
+
+  printf("Worst error witnessed: %f", worst_error_witness);
+  
+}
 // Iterates over possible setting of the RPY limits flag, and for each setting
 // evaluates a mesh of points within those limits.  This test confirms that
 // of the rotation matrices generated from rotations with those limits are
