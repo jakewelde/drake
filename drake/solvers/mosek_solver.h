@@ -23,6 +23,12 @@ class MosekSolver : public MathematicalProgramSolverInterface {
    */
   bool available() const override;
 
+  /**
+   * Sets the branching priority for a set of variables.
+   */
+
+  void set_branch_priority(const VariableRefList& vars, int priority);
+
   SolutionResult Solve(MathematicalProgram& prog) const override;
 
   SolverType solver_type() const override { return SolverType::kMosek; }
@@ -55,6 +61,9 @@ class MosekSolver : public MathematicalProgramSolverInterface {
   // during the first call of Solve() (which avoids grabbing a Mosek license
   // before we know that we actually want one).
   mutable std::shared_ptr<License> license_;
+
+  std::list<std::pair<drake::symbolic::Variable, int>>
+    branch_priority_settings_;
 };
 
 }  // namespace solvers
