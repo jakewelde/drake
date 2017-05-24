@@ -10,6 +10,8 @@
 #include <Eigen/SparseCore>
 #include <mosek.h>
 
+#include "drake/solvers/mosek_solver_enum_map_builder.h"
+
 namespace drake {
 namespace solvers {
 namespace {
@@ -562,6 +564,14 @@ MSKrescodee SpecifyVariableType(const MathematicalProgram& prog,
 
 bool MosekSolver::available() const { return true; }
 
+void MosekSolver::set_branch_priority(const VariableRefList& vars, int priority){
+  for (auto const & var : vars) {
+    for (int i = 0; i < var.size(); i++) {
+      branch_priority_settings_.push_back({var(i), priority});
+    }
+  }
+}
+
 SolutionResult MosekSolver::Solve(MathematicalProgram& prog) const {
   const int num_vars = prog.num_vars();
   MSKenv_t env = nullptr;
@@ -627,6 +637,48 @@ SolutionResult MosekSolver::Solve(MathematicalProgram& prog) const {
   if (rescode == MSK_RES_OK) {
     rescode = AddLinearMatrixInequalityConstraint(prog, &task);
   }
+
+  if (rescode == MSK_RES_OK) {
+    for (auto const & priority_pair : branch_priority_settings_) {
+      rescode = MSK_putvarbranchorder(task, 
+                                      prog.FindDecisionVariableIndex(priority_pair.first),
+                                      priority_pair.second,
+                                      MSK_BRANCH_DIR_FREE);
+      if (rescode != MSK_RES_OK){
+        printf("Problem putting a branch order.\n");
+        continue;
+      }
+    }
+  }
+
+
+  std::map<std::string, int> MSK_str_to_enum_map = build_MSK_str_to_enum_map();
+
+  for (const auto it : prog.GetSolverOptionsDouble(SolverType::kMosek)) {
+    rescode = MSK_putdouparam(task, (MSKdparame) MSK_str_to_enum_map[it.first], it.second);
+    if (rescode != MSK_RES_OK){
+      printf("Problem setting dbl param %s to %f\n", it.first.c_str(), it.second);
+    }
+  }
+
+  for (const auto it : prog.GetSolverOptionsInt(SolverType::kMosek)) {
+    rescode = MSK_putintparam(task, (MSKiparame) MSK_str_to_enum_map[it.first], it.second);
+    if (rescode != MSK_RES_OK){
+      printf("Problem setting int param %s to %d\n", it.first.c_str(), it.second);
+    }
+  }
+
+/*
+  for (int i = 0; i < static_cast<int>(prog.num_vars()); ++i) {
+    if (!std::isnan(prog.initial_guess()(i))) {
+      error = Bsetdblattrelement(model, "Start",
+                                   i, prog.initial_guess()(i));
+      DRAKE_DEMAND(!error);
+    }
+  }
+*/
+
+  MSK_linkfiletotaskstream(task,MSK_STREAM_LOG ,"moseklog.txt", 1);
 
   SolutionResult result = SolutionResult::kUnknownError;
   // Run optimizer.
