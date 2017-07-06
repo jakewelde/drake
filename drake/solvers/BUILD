@@ -436,6 +436,7 @@ drake_cc_library(
         "//tools:with_mosek": [
             "mosek_solver.cc",
             "mosek_solver_common.cc",
+            "mosek_solver_enum_map_builder.h"
         ],
         "//conditions:default": [
             "mosek_solver_common.cc",
@@ -896,6 +897,7 @@ cpplint(extra_srcs = [
     "mosek_solver.cc",
     "mosek_solver.h",
     "mosek_solver_common.cc",
+    "mosek_solver_enum_map_extra.h",
     "nlopt_solver.cc",
     "nlopt_solver.h",
     "nlopt_solver_common.cc",

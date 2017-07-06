@@ -6,6 +6,7 @@
 #include <Eigen/Core>
 
 #include "drake/common/drake_copyable.h"
+#include "drake/solvers/decision_variable.h"
 #include "drake/solvers/mathematical_program_solver_interface.h"
 
 namespace drake {
