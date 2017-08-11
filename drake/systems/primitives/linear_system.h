@@ -98,7 +98,9 @@ class LinearSystem : public AffineSystem<T> {
 ///
 std::unique_ptr<LinearSystem<double>> Linearize(
     const System<double>& system, const Context<double>& context,
-    const double equilibrium_check_tolerance = 1e-6);
+    const double equilibrium_check_tolerance = 1e-6,
+    const int input_port = 0,
+    const int output_port = 0);
 
 /// Returns the controllability matrix:  R = [B, AB, ..., A^{n-1}B].
 /// @ingroup control_systems

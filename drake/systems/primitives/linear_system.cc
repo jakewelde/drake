@@ -67,20 +67,23 @@ template class LinearSystem<AutoDiffXd>;
 
 std::unique_ptr<LinearSystem<double>> Linearize(
     const System<double>& system, const Context<double>& context,
-    const double equilibrium_check_tolerance) {
+    const double equilibrium_check_tolerance, const int input_port,
+    const int output_port) {
   DRAKE_ASSERT_VOID(system.CheckValidContext(context));
 
   DRAKE_DEMAND(context.is_stateless() || context.has_only_continuous_state());
   // TODO(russt): handle the discrete time case
 
-  DRAKE_DEMAND(system.get_num_input_ports() <= 1);
-  DRAKE_DEMAND(system.get_num_output_ports() <= 1);
+  DRAKE_DEMAND((system.get_num_input_ports() <= 1 && input_port == 0) ||
+               system.get_num_input_ports() > input_port);
+  DRAKE_DEMAND((system.get_num_output_ports() <= 1 && output_port == 0) ||
+               system.get_num_output_ports() > output_port);
 
   const int num_inputs = (system.get_num_input_ports() > 0)
-                             ? system.get_input_port(0).size()
+                             ? system.get_input_port(input_port).size()
                              : 0,
             num_outputs = (system.get_num_output_ports() > 0)
-                              ? system.get_output_port(0).size()
+                              ? system.get_output_port(output_port).size()
                               : 0;
 
   // Create an autodiff version of the system.
@@ -109,7 +112,7 @@ std::unique_ptr<LinearSystem<double>> Linearize(
     auto input_vector = std::make_unique<BasicVector<AutoDiffXd>>(num_inputs);
     input_vector->SetFromVector(std::get<1>(autodiff_args));
     autodiff_context->SetInputPortValue(
-        0,
+        input_port,
         std::make_unique<FreestandingInputPortValue>(std::move(input_vector)));
   }
 
@@ -138,7 +141,8 @@ std::unique_ptr<LinearSystem<double>> Linearize(
     std::unique_ptr<SystemOutput<AutoDiffXd>> autodiff_y0 =
         autodiff_system->AllocateOutput(*autodiff_context);
     autodiff_system->CalcOutput(*autodiff_context, autodiff_y0.get());
-    auto autodiff_y0_vec = autodiff_y0->get_vector_data(0)->CopyToVector();
+    auto autodiff_y0_vec =
+        autodiff_y0->get_vector_data(output_port)->CopyToVector();
 
     Eigen::MatrixXd CD = math::autoDiffToGradientMatrix(autodiff_y0_vec);
     C = CD.leftCols(num_states);
