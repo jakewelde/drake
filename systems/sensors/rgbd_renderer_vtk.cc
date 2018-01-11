@@ -323,6 +323,7 @@ optional<RgbdRenderer::VisualIndex> RgbdRendererVTK::Impl::ImplRegisterVisual(
   vtkNew<vtkPolyDataMapper> mapper;
   bool shape_matched = true;
   bool texture_found = false;
+
   const DrakeShapes::Geometry& geometry = visual.getGeometry();
   switch (visual.getShape()) {
     case DrakeShapes::BOX: {
@@ -365,9 +366,9 @@ optional<RgbdRenderer::VisualIndex> RgbdRendererVTK::Impl::ImplRegisterVisual(
       break;
     }
     case DrakeShapes::MESH: {
-      const auto* mesh_filename =
-          dynamic_cast<const DrakeShapes::Mesh&>(geometry)
-              .resolved_filename_.c_str();
+      const DrakeShapes::Mesh& geometry_as_mesh =
+          dynamic_cast<const DrakeShapes::Mesh&>(geometry);
+      const auto* mesh_filename = geometry_as_mesh.resolved_filename_.c_str();
 
       // TODO(kunimatsu-tri) Add support for other file formats.
       vtkNew<vtkOBJReader> mesh_reader;
@@ -394,7 +395,24 @@ optional<RgbdRenderer::VisualIndex> RgbdRendererVTK::Impl::ImplRegisterVisual(
         texture_found = true;
       }
 
-      mapper->SetInputConnection(mesh_reader->GetOutputPort());
+      // Handle mesh scaling as another transformation,
+      // if it's necessary.
+      if (geometry_as_mesh.scale_[0] != 1.0 ||
+          geometry_as_mesh.scale_[1] != 1.0 ||
+          geometry_as_mesh.scale_[2] != 1.0) {
+        vtkNew<vtkTransform> scale_transform;
+        scale_transform->Scale(geometry_as_mesh.scale_[0],
+                               geometry_as_mesh.scale_[1],
+                               geometry_as_mesh.scale_[2]);
+        vtkNew<vtkTransformPolyDataFilter> transform_filter;
+        transform_filter->SetInputConnection(mesh_reader->GetOutputPort());
+        transform_filter->SetTransform(scale_transform.GetPointer());
+        transform_filter->Update();
+        mapper->SetInputConnection(transform_filter->GetOutputPort());
+      } else {
+        mapper->SetInputConnection(mesh_reader->GetOutputPort());
+      }
+
       break;
     }
     case DrakeShapes::CAPSULE: {
