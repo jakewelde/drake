@@ -76,6 +76,42 @@ PYBIND11_MODULE(_autodiffutils_py, m) {
     }, py::is_operator())
     .def("__rtruediv__", [](const AutoDiffXd& self, double other) {
       return eval(other / self);
+    }, py::is_operator())
+    .def("__lt__", [](const AutoDiffXd& self, const AutoDiffXd& other) {
+      return self < other;
+    }, py::is_operator())
+    .def("__lt__", [](const AutoDiffXd& self, double other) {
+      return self < other;
+    }, py::is_operator())
+    .def("__le__", [](const AutoDiffXd& self, const AutoDiffXd& other) {
+      return self <= other;
+    }, py::is_operator())
+    .def("__le__", [](const AutoDiffXd& self, double other) {
+      return self <= other;
+    }, py::is_operator())
+    .def("__gt__", [](const AutoDiffXd& self, const AutoDiffXd& other) {
+      return self > other;
+    }, py::is_operator())
+    .def("__gt__", [](const AutoDiffXd& self, double other) {
+      return self > other;
+    }, py::is_operator())
+    .def("__ge__", [](const AutoDiffXd& self, const AutoDiffXd& other) {
+      return self >= other;
+    }, py::is_operator())
+    .def("__ge__", [](const AutoDiffXd& self, double other) {
+      return self >= other;
+    }, py::is_operator())
+    .def("__eq__", [](const AutoDiffXd& self, const AutoDiffXd& other) {
+      return self == other;
+    }, py::is_operator())
+    .def("__eq__", [](const AutoDiffXd& self, double other) {
+      return self == other;
+    }, py::is_operator())
+    .def("__ne__", [](const AutoDiffXd& self, const AutoDiffXd& other) {
+      return self != other;
+    }, py::is_operator())
+    .def("__ne__", [](const AutoDiffXd& self, double other) {
+      return self != other;
     }, py::is_operator());
 }
 
