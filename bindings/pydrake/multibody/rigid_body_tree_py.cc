@@ -197,6 +197,16 @@ PYBIND11_MODULE(rigid_body_tree, m) {
       return tree.relativeTransform(cache, base_or_frame_ind,
         body_or_frame_ind).matrix();
     })
+    .def("ComputeMaximumDepthCollisionPoints",
+         &RigidBodyTree<double>::ComputeMaximumDepthCollisionPoints<double>,
+         py::arg("cache"),
+         py::arg("use_margins") = true,
+         py::arg("throw_if_missing_gradient") = true)
+    .def("ComputeMaximumDepthCollisionPoints",
+         &RigidBodyTree<double>::ComputeMaximumDepthCollisionPoints<AutoDiffXd>,
+         py::arg("cache"),
+         py::arg("use_margins") = true,
+         py::arg("throw_if_missing_gradient") = true)
     .def("add_rigid_body", &RigidBodyTree<double>::add_rigid_body)
     .def("addCollisionElement", &RigidBodyTree<double>::addCollisionElement)
     .def("addFrame", &RigidBodyTree<double>::addFrame)
