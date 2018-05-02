@@ -3,7 +3,10 @@
 #include "pybind11/stl.h"
 
 #include "drake/bindings/pydrake/pydrake_pybind.h"
+#include "drake/bindings/pydrake/util/cpp_template_pybind.h"
+#include "drake/bindings/pydrake/systems/systems_pybind.h"
 #include "drake/multibody/collision/element.h"
+#include "drake/multibody/collision/point_pair.h"
 #include "drake/multibody/rigid_body.h"
 
 namespace drake {
@@ -17,6 +20,24 @@ PYBIND11_MODULE(collision, m) {
 
   py::module::import("pydrake.multibody.shapes");
   py::module::import("pydrake.multibody.rigid_body");
+  py::module::import("pydrake.systems.framework");
+
+   auto bind_common_scalar_types = [m](auto dummy) {
+    using T = decltype(dummy);
+
+    DefineTemplateClassWithDefault<PointPair<T>>(
+      m, "PointPair", GetPyParam<T>())
+      .def_readonly("elementA", &PointPair<T>::elementA, py_reference_internal)
+      .def_readonly("elementB", &PointPair<T>::elementB, py_reference_internal)
+      .def_readonly("idA", &PointPair<T>::idA)
+      .def_readonly("idB", &PointPair<T>::idB)
+      .def_readonly("ptA", &PointPair<T>::ptA)
+      .def_readonly("ptB", &PointPair<T>::ptB)
+      .def_readonly("normal", &PointPair<T>::normal)
+      .def_readonly("distnace", &PointPair<T>::distance);
+  };
+  type_visit(bind_common_scalar_types,
+             pysystems::CommonScalarPack{});
 
   py::class_<Element, DrakeShapes::Element>(m, "CollisionElement")
   .def("__init__",
