@@ -34,7 +34,7 @@ PYBIND11_MODULE(collision, m) {
       .def_readonly("ptA", &PointPair<T>::ptA)
       .def_readonly("ptB", &PointPair<T>::ptB)
       .def_readonly("normal", &PointPair<T>::normal)
-      .def_readonly("distnace", &PointPair<T>::distance);
+      .def_readonly("distance", &PointPair<T>::distance);
   };
   type_visit(bind_common_scalar_types,
              pysystems::CommonScalarPack{});
