@@ -339,3 +339,38 @@ class TestRigidBodyTree(unittest.TestCase):
 
         self.assertEqual(body_1.get_position_start_index(), 0)
         self.assertEqual(body_2.get_position_start_index(), 1)
+
+    def test_collision_detection(self):
+        # Adds some simple geometry to a RBT to test
+        # collision detection.
+        rbt = RigidBodyTree()
+
+        urdf_path = FindResourceOrThrow(
+            "drake/multibody/models/box.urdf")
+
+        AddModelInstanceFromUrdfFile(rbt, urdf_path)
+        AddModelInstanceFromUrdfFile(rbt, urdf_path)
+
+        rbt.compile()
+
+        self.assertEqual(rbt.get_num_positions(), 12)
+
+        # Each box added is .1 x .2 x .3 in size,
+        # and we will offset the first box so
+        # that it only overlaps in z by 0.1.
+        q = np.zeros(12)
+        q[0] = 0.05
+        q[1] = 0.1
+
+        def get_point_pairs(q):
+            kinsol = rbt.doKinematics(q)
+            point_pairs = rbt.ComputeMaximumDepthCollisionPoints(
+                kinsol, use_margin=False, throw_if_missing_gradient=True)
+            return point_pairs
+
+        ps = get_point_pairs(q)
+        print ps
+        gs = jacobian(get_point_pairs, q)
+        print gs
+        self.assertTrue(False)
+
