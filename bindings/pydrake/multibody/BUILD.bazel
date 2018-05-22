@@ -94,10 +94,6 @@ drake_pybind_library(
 
 drake_pybind_library(
     name = "collision_py",
-    cc_deps = [
-        "//bindings/pydrake/systems:systems_pybind",
-        "//bindings/pydrake/util:cpp_template_pybind",
-    ],
     cc_so_name = "collision",
     cc_srcs = ["collision_py.cc"],
     package_info = PACKAGE_INFO,
@@ -195,6 +191,7 @@ drake_py_unittest(
     data = [
         "//examples/atlas:models",
         "//examples/pendulum:models",
+        "//multibody:models",
     ],
     deps = [":rigid_body_tree_py"],
 )

@@ -5,6 +5,7 @@ import os
 import unittest
 
 import pydrake
+from pydrake.autodiffutils import AutoDiffXd
 from pydrake.common import FindResourceOrThrow
 from pydrake.forwarddiff import jacobian
 from pydrake.multibody.collision import CollisionElement
@@ -13,6 +14,7 @@ from pydrake.multibody.parsers import PackageMap
 from pydrake.multibody.rigid_body import RigidBody
 from pydrake.multibody.rigid_body_tree import (
     AddFlatTerrainToWorld,
+    AddModelInstanceFromUrdfFile,
     RigidBodyFrame,
     RigidBodyTree,
     FloatingBaseType
@@ -347,30 +349,34 @@ class TestRigidBodyTree(unittest.TestCase):
 
         urdf_path = FindResourceOrThrow(
             "drake/multibody/models/box.urdf")
+        frame = RigidBodyFrame(
+            name="frame_1", body=rbt.world(),
+            xyz=[0, 0, 0], rpy=[0, 0, 0])
+        rbt.addFrame(frame)
 
-        AddModelInstanceFromUrdfFile(rbt, urdf_path)
-        AddModelInstanceFromUrdfFile(rbt, urdf_path)
+        AddModelInstanceFromUrdfFile(
+            urdf_path, FloatingBaseType.kRollPitchYaw, frame, rbt)
+        AddModelInstanceFromUrdfFile(
+            urdf_path, FloatingBaseType.kRollPitchYaw, frame, rbt)
 
         rbt.compile()
 
-        self.assertEqual(rbt.get_num_positions(), 12)
+        nq = rbt.get_num_positions()
+        self.assertEqual(nq, 12)
 
         # Each box added is .1 x .2 x .3 in size,
-        # and we will offset the first box so
-        # that it only overlaps in z by 0.1.
-        q = np.zeros(12)
-        q[0] = 0.05
-        q[1] = 0.1
-
-        def get_point_pairs(q):
-            kinsol = rbt.doKinematics(q)
-            point_pairs = rbt.ComputeMaximumDepthCollisionPoints(
-                kinsol, use_margin=False, throw_if_missing_gradient=True)
-            return point_pairs
-
-        ps = get_point_pairs(q)
-        print ps
-        gs = jacobian(get_point_pairs, q)
-        print gs
-        self.assertTrue(False)
-
+        # and are spawned completely overlapping
+        q = np.zeros(nq)
+        kinsol = rbt.doKinematics(q)
+        point_pairs = rbt.ComputeMaximumDepthCollisionPoints(
+            kinsol, use_margins=False, throw_if_missing_gradient=True)
+        self.assertEqual(len(point_pairs), 1)
+        pp = point_pairs[0]
+        self.assertIsInstance(pp.elementA, CollisionElement)
+        self.assertIsInstance(pp.elementB, CollisionElement)
+        self.assertIsInstance(pp.idA, int)
+        self.assertIsInstance(pp.idB, int)
+        self.assertEqual(len(pp.ptA), 3)
+        self.assertEqual(len(pp.ptB), 3)
+        self.assertEqual(len(pp.normal), 3)
+        self.assertIsInstance(pp.distance, float)
