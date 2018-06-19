@@ -7,6 +7,7 @@
 #include "drake/multibody/joints/fixed_axis_one_dof_joint.h"
 #include "drake/multibody/joints/prismatic_joint.h"
 #include "drake/multibody/joints/revolute_joint.h"
+#include "drake/multibody/joints/roll_pitch_yaw_floating_joint.h"
 
 namespace drake {
 namespace pydrake {
@@ -33,6 +34,13 @@ PYBIND11_MODULE(joints, m) {
          py::arg("name"),
          py::arg("transform_to_parent_body"),
          py::arg("rotation_axis"));
+
+  py::class_<RollPitchYawFloatingJoint, DrakeJoint>(m,
+      "RollPitchYawFloatingJoint")
+    .def(py::init<const std::string&,
+                  const Eigen::Isometry3d&>(),
+         py::arg("name"),
+         py::arg("transform_to_parent_body"));
 }
 
 }  // namespace pydrake
