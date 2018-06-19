@@ -185,17 +185,16 @@ void RgbdCamera::OutputPoseVector(
 }
 
 void RgbdCamera::UpdateModelPoses(
-    const BasicVector<double>& input_vector) const {
+    const BasicVector<double>& input_vector,
+    const Eigen::Isometry3d& internal_camera_tf) const {
   const Eigen::VectorXd q =
       input_vector.CopyToVector().head(tree_.get_num_positions());
   KinematicsCache<double> cache = tree_.doKinematics(q);
 
-  if (!camera_fixed_) {
-    // Updates camera poses.
-    Eigen::Isometry3d X_WB =
-      tree_.CalcFramePoseInWorldFrame(cache, frame_);
-    renderer_->UpdateViewpoint(X_WB * X_BC_);
-  }
+  // Updates camera poses.
+  Eigen::Isometry3d X_WB =
+    tree_.CalcFramePoseInWorldFrame(cache, frame_);
+  renderer_->UpdateViewpoint(X_WB * internal_camera_tf);
 
   // Updates body poses.
   for (const auto& body : tree_.get_bodies()) {
@@ -219,7 +218,7 @@ void RgbdCamera::OutputColorImage(const Context<double>& context,
   const BasicVector<double>* input_vector =
       this->EvalVectorInput(context, state_input_port_->get_index());
 
-  UpdateModelPoses(*input_vector);
+  UpdateModelPoses(*input_vector, X_BC_);
   renderer_->RenderColorImage(color_image);
 }
 
@@ -228,7 +227,7 @@ void RgbdCamera::OutputDepthImage(const Context<double>& context,
   const BasicVector<double>* input_vector =
       this->EvalVectorInput(context, state_input_port_->get_index());
 
-  UpdateModelPoses(*input_vector);
+  UpdateModelPoses(*input_vector, X_BD_);
   renderer_->RenderDepthImage(depth_image);
 }
 
@@ -237,7 +236,7 @@ void RgbdCamera::OutputLabelImage(const Context<double>& context,
   const BasicVector<double>* input_vector =
       this->EvalVectorInput(context, state_input_port_->get_index());
 
-  UpdateModelPoses(*input_vector);
+  UpdateModelPoses(*input_vector, X_BC_);
   renderer_->RenderLabelImage(label_image);
 }
 

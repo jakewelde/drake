@@ -204,6 +204,10 @@ PYBIND11_MODULE(sensors, m) {
          py_reference_internal)
     .def("depth_camera_info", &RgbdCamera::depth_camera_info,
          py_reference_internal)
+    .def("set_color_camera_optical_pose",
+         &RgbdCamera::set_color_camera_optical_pose)
+    .def("set_depth_camera_optical_pose",
+         &RgbdCamera::set_depth_camera_optical_pose)
     .def("color_camera_optical_pose", &RgbdCamera::color_camera_optical_pose)
     .def("depth_camera_optical_pose", &RgbdCamera::depth_camera_optical_pose)
     .def("frame", &RgbdCamera::frame, py_reference_internal)
