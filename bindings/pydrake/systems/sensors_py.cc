@@ -213,11 +213,18 @@ PYBIND11_MODULE(sensors, m) {
           doc.RgbdCamera.color_camera_optical_pose.doc)
       .def("depth_camera_optical_pose", &RgbdCamera::depth_camera_optical_pose,
           doc.RgbdCamera.depth_camera_optical_pose.doc)
+      .def("set_color_camera_optical_pose",
+           &RgbdCamera::set_color_camera_optical_pose,
+           doc.RgbdCamera.set_color_camera_optical_pose)
+      .def("set_depth_camera_optical_pose",
+           &RgbdCamera::set_depth_camera_optical_pose,
+           doc.RgbdCamera.set_depth_camera_optical_pose)
       .def("frame", &RgbdCamera::frame, py_reference_internal,
           doc.RgbdCamera.frame.doc)
       .def("frame", &RgbdCamera::frame, py_reference_internal,
           doc.RgbdCamera.frame.doc)
       .def("tree", &RgbdCamera::tree, py_reference, doc.RgbdCamera.tree.doc);
+
   def_camera_ports(&rgbd_camera);
 
   py::class_<RgbdCameraDiscrete, Diagram<T>> rgbd_camera_discrete(

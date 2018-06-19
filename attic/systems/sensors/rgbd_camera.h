@@ -245,8 +245,18 @@ class RgbdCamera final : public LeafSystem<double> {
   /// Reterns the depth sensor's info.
   const CameraInfo& depth_camera_info() const { return depth_camera_info_; }
 
+  /// Set 'X_BC'.
+  void set_color_camera_optical_pose(const Eigen::Isometry3d& new_pose) {
+    X_BC_ = new_pose;
+  }
+
   /// Returns `X_BC`.
   const Eigen::Isometry3d& color_camera_optical_pose() const { return X_BC_; }
+
+  /// Set 'X_BD'.
+  void set_depth_camera_optical_pose(const Eigen::Isometry3d& new_pose) {
+    X_BD_ = new_pose;
+  }
 
   /// Returns `X_BD`.
   const Eigen::Isometry3d& depth_camera_optical_pose() const { return X_BD_; }
@@ -303,7 +313,8 @@ class RgbdCamera final : public LeafSystem<double> {
   // TODO(sherm1) This should be the calculator for a cache entry containing
   // the VTK update that must be valid before outputting any image info. For
   // now it has to be repeated before each image output port calculation.
-  void UpdateModelPoses(const BasicVector<double>& input_vector) const;
+  void UpdateModelPoses(const BasicVector<double>& input_vector,
+                        const Eigen::Isometry3d& internal_camera_tf) const;
 
   const InputPort<double>* state_input_port_{};
   const OutputPort<double>* color_image_port_{};
@@ -320,17 +331,17 @@ class RgbdCamera final : public LeafSystem<double> {
   const CameraInfo color_camera_info_;
   const CameraInfo depth_camera_info_;
   const Eigen::Isometry3d X_WB_initial_;
-  // The color sensor's origin (`Co`) is offset by 0.02 m on the Y axis of
+  // The color sensor's origin (`Co`) is offset by 0.00 m on the Y axis of
   // the RgbdCamera's base coordinate system (`B`).
   // TODO(kunimatsu-tri) Add support for arbitrary relative pose.
   // TODO(kunimatsu-tri) Change the X_BD_ to be different from X_BC_ when
   // it's needed.
-  const Eigen::Isometry3d X_BC_{Eigen::Translation3d(0., 0.02, 0.) *
+  Eigen::Isometry3d X_BC_{Eigen::Translation3d(0., 0.00, 0.) *
         (Eigen::AngleAxisd(-M_PI_2, Eigen::Vector3d::UnitX()) *
          Eigen::AngleAxisd(M_PI_2, Eigen::Vector3d::UnitY()))};
-  // The depth sensor's origin (`Do`) is offset by 0.02 m on the Y axis of
+  // The depth sensor's origin (`Do`) is offset by 0.025 m on the Y axis of
   // the RgbdCamera's base coordinate system (`B`).
-  const Eigen::Isometry3d X_BD_{Eigen::Translation3d(0., 0.02, 0.) *
+  Eigen::Isometry3d X_BD_{Eigen::Translation3d(0., 0.025, 0.) *
         (Eigen::AngleAxisd(-M_PI_2, Eigen::Vector3d::UnitX()) *
          Eigen::AngleAxisd(M_PI_2, Eigen::Vector3d::UnitY()))};
 
