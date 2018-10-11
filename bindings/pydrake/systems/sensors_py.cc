@@ -205,6 +205,15 @@ PYBIND11_MODULE(sensors, m) {
           py::arg("height") = int{RenderingConfig::kDefaultHeight},
           // Keep alive, reference: `this` keeps  `RigidBodyTree` alive.
           py::keep_alive<1, 3>(), doc.RgbdCamera.ctor.doc_10args)
+      .def("ConvertDepthImageToPointCloud",
+           [](const RgbdCamera& self,
+              const ImageDepth32F& depth_image,
+              const CameraInfo& camera_info) {
+            auto pts = Eigen::Matrix3Xf(3, 0);
+            self.ConvertDepthImageToPointCloud(depth_image, camera_info, &pts);
+            return pts;
+          }, py::arg("depth_image"), py::arg("camera_info"),
+          doc.RgbdCamera.ConvertDepthImageToPointCloud.doc)
       .def("color_camera_info", &RgbdCamera::color_camera_info,
           py_reference_internal, doc.RgbdCamera.color_camera_info.doc)
       .def("depth_camera_info", &RgbdCamera::depth_camera_info,
