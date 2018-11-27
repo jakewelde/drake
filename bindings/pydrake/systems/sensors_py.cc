@@ -205,7 +205,8 @@ PYBIND11_MODULE(sensors, m) {
           py::arg("height") = int{RenderingConfig::kDefaultHeight},
           // Keep alive, reference: `this` keeps  `RigidBodyTree` alive.
           py::keep_alive<1, 3>(), doc.RgbdCamera.ctor.doc_10args)
-      /*
+      /* This was moved out to its own file and is not a static method
+         of RGBDCamera any more...
       .def("ConvertDepthImageToPointCloud",
            [](const RgbdCamera& self,
               const ImageDepth32F& depth_image,
@@ -215,7 +216,6 @@ PYBIND11_MODULE(sensors, m) {
             return pts;
           }, py::arg("depth_image"), py::arg("camera_info"),
           doc.RgbdCamera.ConvertDepthImageToPointCloud.doc)*/
-      /*
       .def("color_camera_info", &RgbdCamera::color_camera_info,
           py_reference_internal, doc.RgbdCamera.color_camera_info.doc)
       .def("depth_camera_info", &RgbdCamera::depth_camera_info,
@@ -226,10 +226,10 @@ PYBIND11_MODULE(sensors, m) {
           doc.RgbdCamera.depth_camera_optical_pose.doc)
       .def("set_color_camera_optical_pose",
            &RgbdCamera::set_color_camera_optical_pose,
-           doc.RgbdCamera.set_color_camera_optical_pose)
+           doc.RgbdCamera.set_color_camera_optical_pose.doc)
       .def("set_depth_camera_optical_pose",
            &RgbdCamera::set_depth_camera_optical_pose,
-           doc.RgbdCamera.set_depth_camera_optical_pose)*/
+           doc.RgbdCamera.set_depth_camera_optical_pose.doc)
       .def("frame", &RgbdCamera::frame, py_reference_internal,
           doc.RgbdCamera.frame.doc)
       .def("tree", &RgbdCamera::tree, py_reference, doc.RgbdCamera.tree.doc);
