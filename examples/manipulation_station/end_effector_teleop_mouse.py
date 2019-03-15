@@ -13,7 +13,7 @@ from pydrake.systems.analysis import Simulator
 from pydrake.systems.framework import (BasicVector, DiagramBuilder,
                                        LeafSystem)
 from pydrake.systems.meshcat_visualizer import MeshcatVisualizer
-from pydrake.systems.primitives import FirstOrderLowPassFilter
+from pydrake.systems.primitives import FirstOrderLowPassFilter, SignalLogger
 
 from differential_ik import DifferentialIK
 import sys
@@ -73,9 +73,9 @@ class TeleopMouseKeyboardManager():
 
         for event in pygame.event.get():
             if event.type == QUIT:
-                sys.exit(0)
+                raise KeyboardInterrupt
             elif event.type == KEYDOWN and event.key == K_ESCAPE:
-                sys.exit(0)
+                raise KeyboardInterrupt
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 4:
                     mouse_wheel_up = True
@@ -268,6 +268,44 @@ args = parser.parse_args()
 
 builder = DiagramBuilder()
 
+def _xyz_rpy(p, rpy):
+    return RigidTransform(rpy=RollPitchYaw(rpy), p=p)
+
+def CreateYcbObjectClutter():
+    ycb_object_pairs = []
+
+    X_WCracker = _xyz_rpy([0.35, 0.15, 0.09], [0, -1.57, 4])
+    ycb_object_pairs.append(
+        ("drake/manipulation/models/ycb/sdf/003_cracker_box.sdf", X_WCracker))
+
+    # The sugar box pose.
+    X_WSugar = _xyz_rpy([0.28, -0.17, 0.03], [0, 1.57, 3.14])
+    ycb_object_pairs.append(
+        ("drake/manipulation/models/ycb/sdf/004_sugar_box.sdf", X_WSugar))
+
+    # The tomato soup can pose.
+    X_WSoup = _xyz_rpy([0.40, -0.07, 0.03], [-1.57, 0, 3.14])
+    ycb_object_pairs.append(
+        ("drake/manipulation/models/ycb/sdf/005_tomato_soup_can.sdf", X_WSoup))
+
+    # The mustard bottle pose.
+    X_WMustard = _xyz_rpy([0.45, -0.16, 0.09], [-1.57, 0, 3.3])
+    ycb_object_pairs.append(
+        ("drake/manipulation/models/ycb/sdf/006_mustard_bottle.sdf",
+         X_WMustard))
+
+    # The gelatin box pose.
+    X_WGelatin = _xyz_rpy([0.35, -0.32, 0.1], [-1.57, 0, 3.7])
+    ycb_object_pairs.append(
+        ("drake/manipulation/models/ycb/sdf/009_gelatin_box.sdf", X_WGelatin))
+
+    # The potted meat can pose.
+    X_WMeat = _xyz_rpy([0.35, -0.32, 0.03], [-1.57, 0, 2.5])
+    ycb_object_pairs.append(
+        ("drake/manipulation/models/ycb/sdf/010_potted_meat_can.sdf", X_WMeat))
+
+    return ycb_object_pairs
+
 if args.hardware:
     station = builder.AddSystem(ManipulationStationHardwareInterface())
     station.Connect(wait_for_cameras=False)
@@ -278,8 +316,8 @@ else:
     if args.setup == 'default':
         station.SetupDefaultStation()
     elif args.setup == 'clutter_clearing':
-        station.SetupClutterClearingStation()
-        ycb_objects = CreateDefaultYcbObjectList()
+        station.SetupDefaultStation()
+        ycb_objects = CreateYcbObjectClutter()
         for model_file, X_WObject in ycb_objects:
             station.AddManipulandFromFile(model_file, X_WObject)
 
@@ -296,7 +334,7 @@ robot = station.get_controller_plant()
 params = DifferentialInverseKinematicsParameters(robot.num_positions(),
                                                  robot.num_velocities())
 
-time_step = 0.005
+time_step = 0.001
 params.set_timestep(time_step)
 # True velocity limits for the IIWA14 (in rad, rounded down to the first
 # decimal)
@@ -328,6 +366,15 @@ builder.Connect(teleop.GetOutputPort("position"), station.GetInputPort(
 builder.Connect(teleop.GetOutputPort("force_limit"),
                 station.GetInputPort("wsg_force_limit"))
 
+wsg_position_input_logger = builder.AddSystem(SignalLogger(1))
+wsg_position_input_logger.set_publish_period(0.001)
+builder.Connect(teleop.GetOutputPort("position"),
+                wsg_position_input_logger.get_input_port(0))
+diff_ik_rpy_xyz_desired_logger = builder.AddSystem(SignalLogger(6))
+diff_ik_rpy_xyz_desired_logger.set_publish_period(0.001)
+builder.Connect(filter.get_output_port(0),
+                diff_ik_rpy_xyz_desired_logger.get_input_port(0))
+
 diagram = builder.Build()
 simulator = Simulator(diagram)
 
@@ -339,6 +386,7 @@ station_context.FixInputPort(station.GetInputPort(
 
 q0 = station.GetOutputPort("iiwa_position_measured").Eval(station_context)
 differential_ik.parameters.set_nominal_joint_position(q0)
+q0_initial = q0.copy()
 
 teleop.SetPose(differential_ik.ForwardKinematics(q0))
 filter.set_initial_output_value(
@@ -355,4 +403,24 @@ simulator.set_publish_every_time_step(False)
 simulator.set_target_realtime_rate(args.target_realtime_rate)
 
 print_instructions()
-simulator.StepTo(args.duration)
+try:
+    simulator.StepTo(args.duration)
+except KeyboardInterrupt:
+    print("Terminated, saving")
+except Exception as e:
+    print("Exception, saving")
+
+output_dict = {}
+output_dict["q0"] = q0
+output_dict["rpy_xyz_desired_t"] = diff_ik_rpy_xyz_desired_logger.sample_times()
+output_dict["rpy_xyz_desired_data"] = diff_ik_rpy_xyz_desired_logger.data()
+output_dict["wsg_position_t"] = wsg_position_input_logger.sample_times()
+output_dict["wsg_position_data"] = wsg_position_input_logger.data()
+
+## DOESN'T WORK, CAN'T PICKLE OUT THE C++ OBJECTS
+output_dict["YcbObjectClutter"] = CreateYcbObjectClutter()
+
+import pickle
+import time
+with open("teleop_log_%d.pickle" % (time.time()*1000*1000), "wb") as f:
+    pickle.dump(output_dict, f)

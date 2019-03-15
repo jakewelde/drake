@@ -287,6 +287,7 @@ void ManipulationStation<T>::SetupDefaultStation(
   }
 
   // Add the object.
+  /*
   {
     multibody::Parser parser(plant_);
     const auto model_index = parser.AddModelFromFile(FindResourceOrThrow(
@@ -300,7 +301,7 @@ void ManipulationStation<T>::SetupDefaultStation(
     X_WObject.set_rotation(RotationMatrix<T>::Identity());
     object_poses_.push_back(X_WObject);
   }
-
+  */
   // Add the default iiwa/wsg models.
   AddDefaultIiwa(collision_model);
   AddDefaultWsg();
