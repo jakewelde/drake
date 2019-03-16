@@ -89,9 +89,9 @@ def CreateYcbObjectClutter():
          X_WMustard))
 
     # The gelatin box pose.
-    X_WGelatin = _xyz_rpy([0.35, -0.32, 0.1], [-1.57, 0, 3.7])
-    ycb_object_pairs.append(
-        ("drake/manipulation/models/ycb/sdf/009_gelatin_box.sdf", X_WGelatin))
+    # X_WGelatin = _xyz_rpy([0.35, -0.32, 0.1], [-1.57, 0, 3.7])
+    # ycb_object_pairs.append(
+    #    ("drake/manipulation/models/ycb/sdf/009_gelatin_box.sdf", X_WGelatin))
 
     # The potted meat can pose.
     X_WMeat = _xyz_rpy([0.35, -0.32, 0.03], [-1.57, 0, 2.5])
@@ -131,30 +131,14 @@ else:
                         meshcat.get_input_port(0))
 
 robot = station.get_controller_plant()
-params = DifferentialInverseKinematicsParameters(robot.num_positions(),
-                                                 robot.num_velocities())
 
 time_step = 0.001
-params.set_timestep(time_step)
-# True velocity limits for the IIWA14 (in rad, rounded down to the first
-# decimal)
-iiwa14_velocity_limits = np.array([1.4, 1.4, 1.7, 1.3, 2.2, 2.3, 2.3])
-# Stay within a small fraction of those limits for this teleop demo.
-factor = args.velocity_limit_factor
-params.set_joint_velocity_limits((-factor*iiwa14_velocity_limits,
-                                  factor*iiwa14_velocity_limits))
 
-differential_ik = builder.AddSystem(DifferentialIK(
-    robot, robot.GetFrameByName("iiwa_link_7"), params, time_step))
-
-builder.Connect(differential_ik.GetOutputPort("joint_position_desired"),
-                station.GetInputPort("iiwa_position"))
-
-rpy_xyz_desired_ppt = PiecewisePolynomial.ZeroOrderHold(
-        input_dict["rpy_xyz_desired_t"],
-        input_dict["rpy_xyz_desired_data"])
-rpy_xyz_desired_trajsource = builder.AddSystem(TrajectorySource(
-    trajectory=rpy_xyz_desired_ppt,
+iiwa_position_ppt = PiecewisePolynomial.ZeroOrderHold(
+        input_dict["iiwa_position_t"],
+        input_dict["iiwa_position_data"])
+iiwa_position_trajsource = builder.AddSystem(TrajectorySource(
+    trajectory=iiwa_position_ppt,
     output_derivative_order=0,
     zero_derivatives_beyond_limits=True))
 
@@ -166,8 +150,8 @@ wsg_position_trajsource = builder.AddSystem(TrajectorySource(
     output_derivative_order=0,
     zero_derivatives_beyond_limits=True))
 
-builder.Connect(rpy_xyz_desired_trajsource.get_output_port(0),
-                differential_ik.GetInputPort("rpy_xyz_desired"))
+builder.Connect(iiwa_position_trajsource.get_output_port(0),
+                station.GetInputPort("iiwa_position"))
 
 builder.Connect(wsg_position_trajsource.get_output_port(0),
                 station.GetInputPort("wsg_position"))
@@ -185,11 +169,7 @@ station_context.FixInputPort(station.GetInputPort(
 
 station.SetIiwaPosition(station_context, input_dict["q0"])
 q0 = station.GetOutputPort("iiwa_position_measured").Eval(station_context)
-differential_ik.parameters.set_nominal_joint_position(q0)
 q0_initial = q0.copy()
-
-differential_ik.SetPositions(diagram.GetMutableSubsystemContext(
-    differential_ik, simulator.get_mutable_context()), q0)
 
 # This is important to avoid duplicate publishes to the hardware interface:
 simulator.set_publish_every_time_step(False)

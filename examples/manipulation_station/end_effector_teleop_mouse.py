@@ -295,9 +295,9 @@ def CreateYcbObjectClutter():
          X_WMustard))
 
     # The gelatin box pose.
-    X_WGelatin = _xyz_rpy([0.35, -0.32, 0.1], [-1.57, 0, 3.7])
-    ycb_object_pairs.append(
-        ("drake/manipulation/models/ycb/sdf/009_gelatin_box.sdf", X_WGelatin))
+    # X_WGelatin = _xyz_rpy([0.35, -0.32, 0.1], [-1.57, 0, 3.7])
+    # ycb_object_pairs.append(
+    #    ("drake/manipulation/models/ycb/sdf/009_gelatin_box.sdf", X_WGelatin))
 
     # The potted meat can pose.
     X_WMeat = _xyz_rpy([0.35, -0.32, 0.03], [-1.57, 0, 2.5])
@@ -370,10 +370,11 @@ wsg_position_input_logger = builder.AddSystem(SignalLogger(1))
 wsg_position_input_logger.set_publish_period(0.001)
 builder.Connect(teleop.GetOutputPort("position"),
                 wsg_position_input_logger.get_input_port(0))
-diff_ik_rpy_xyz_desired_logger = builder.AddSystem(SignalLogger(6))
-diff_ik_rpy_xyz_desired_logger.set_publish_period(0.001)
-builder.Connect(filter.get_output_port(0),
-                diff_ik_rpy_xyz_desired_logger.get_input_port(0))
+iiwa_position_logger = builder.AddSystem(SignalLogger(7))
+iiwa_position_logger.set_publish_period(0.001)
+builder.Connect(differential_ik.GetOutputPort("joint_position_desired"),
+                iiwa_position_logger.get_input_port(0))
+
 
 diagram = builder.Build()
 simulator = Simulator(diagram)
@@ -409,11 +410,12 @@ except KeyboardInterrupt:
     print("Terminated, saving")
 except Exception as e:
     print("Exception, saving")
+    print(e)
 
 output_dict = {}
 output_dict["q0"] = q0
-output_dict["rpy_xyz_desired_t"] = diff_ik_rpy_xyz_desired_logger.sample_times()
-output_dict["rpy_xyz_desired_data"] = diff_ik_rpy_xyz_desired_logger.data()
+output_dict["iiwa_position_t"] = iiwa_position_logger.sample_times()
+output_dict["iiwa_position_data"] = iiwa_position_logger.data()
 output_dict["wsg_position_t"] = wsg_position_input_logger.sample_times()
 output_dict["wsg_position_data"] = wsg_position_input_logger.data()
 
