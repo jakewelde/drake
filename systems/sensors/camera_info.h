@@ -112,6 +112,18 @@ class CameraInfo final {
   /// Returns the image center y value in pixels.
   double center_y() const { return intrinsic_matrix_(1, 2); }
 
+  /// Returns the horizontal field of view in radians.
+  /// <pre>
+  ///   fov_x = 2 atan((width / 2) / focal_x))
+  /// </pre>
+  double fov_x() const;
+  
+  /// Returns the vertical field of view in radians.
+  /// <pre>
+  ///   fov_y = 2 atan((height / 2) / focal_y))
+  /// </pre>
+  double fov_y() const;
+
   /// Returns the camera intrinsic matrix.
   const Eigen::Matrix3d& intrinsic_matrix() const {
     return intrinsic_matrix_;

@@ -177,6 +177,8 @@ PYBIND11_MODULE(sensors, m) {
       .def("focal_y", &CameraInfo::focal_y, doc.CameraInfo.focal_y.doc)
       .def("center_x", &CameraInfo::center_x, doc.CameraInfo.center_x.doc)
       .def("center_y", &CameraInfo::center_y, doc.CameraInfo.center_y.doc)
+      .def("fov_x", &CameraInfo::fov_x, doc.CameraInfo.fov_x.doc)
+      .def("fov_y", &CameraInfo::fov_y, doc.CameraInfo.fov_y.doc)
       .def("intrinsic_matrix", &CameraInfo::intrinsic_matrix,
           doc.CameraInfo.intrinsic_matrix.doc);
 

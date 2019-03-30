@@ -26,6 +26,13 @@ CameraInfo::CameraInfo(int width, int height, double vertical_fov_rad)
                  height * 0.5 / std::tan(0.5 * vertical_fov_rad),
                  width * 0.5 - 0.5, height * 0.5 - 0.5) {}
 
+double CameraInfo::fov_x() const {
+  return 2. * std::atan2(width_ / 2., focal_x());
+}
+
+double CameraInfo::fov_y() const {
+  return 2. * std::atan2(height_ / 2., focal_y());
+}
 }  // namespace sensors
 }  // namespace systems
 }  // namespace drake
