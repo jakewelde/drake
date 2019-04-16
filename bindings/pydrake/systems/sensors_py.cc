@@ -15,6 +15,8 @@
 #include "drake/bindings/pydrake/systems/systems_pybind.h"
 #include "drake/common/drake_throw.h"
 #include "drake/common/eigen_types.h"
+#include "drake/geometry/dev/render/camera_properties.h"
+#include "drake/systems/sensors/dev/rgbd_camera.h"
 #include "drake/systems/sensors/camera_info.h"
 #include "drake/systems/sensors/image.h"
 #include "drake/systems/sensors/image_to_lcm_image_array_t.h"
@@ -39,9 +41,13 @@ PYBIND11_MODULE(sensors, m) {
   PYDRAKE_PREVENT_PYTHON3_MODULE_REIMPORT(m);
 
   // NOLINTNEXTLINE(build/namespaces): Emulate placement in namespace.
+  using namespace drake::geometry::dev::render;
+  // NOLINTNEXTLINE(build/namespaces): Emulate placement in namespace.
   using namespace drake::systems;
   // NOLINTNEXTLINE(build/namespaces): Emulate placement in namespace.
   using namespace drake::systems::sensors;
+  // NOLINTNEXTLINE(build/namespaces): Emulate placement in namespace.
+  using namespace drake::systems::sensors::dev;
   constexpr auto& doc = pydrake_doc.drake.systems.sensors;
 
   m.doc() = "Bindings for the sensors portion of the Systems framework.";
@@ -163,6 +169,16 @@ PYBIND11_MODULE(sensors, m) {
 
   using T = double;
 
+  // TODO(gizatt) These belong in a dedicated geometry/geometry::render
+  // bindings module, maybe?
+  py::class_<CameraProperties>(m, "CameraProperties")
+    .def(py::init<int, int, double, string>(), py::arg("width_in"),
+         py::arg("height_in"), py::arg("fov_y_in"), py::arg("renderer_name_in"));
+  py::class_<DepthCameraProperties>(m, "DepthCameraProperties")
+    .def(py::init<int, int, double, string, double, double>(),
+         py::arg("width_in"), py::arg("height_in"), py::arg("fov_y_in"),
+         py::arg("renderer_name_in"), py::arg("z_near_in"), py::arg("z_far_in"));
+
   // Systems.
   py::class_<CameraInfo>(m, "CameraInfo", doc.CameraInfo.doc)
       .def(py::init<int, int, double>(), py::arg("width"), py::arg("height"),
@@ -182,6 +198,30 @@ PYBIND11_MODULE(sensors, m) {
       .def("intrinsic_matrix", &CameraInfo::intrinsic_matrix,
           doc.CameraInfo.intrinsic_matrix.doc);
 
+  {
+    py::class_<RgbdCamera, LeafSystem<T>> rgbd_camera(m, "RgbdCamera");
+    rgbd_camera
+        .def(py::init<const string, const Eigen::Vector3d&, const Eigen::Vector3d&,
+             geometry::dev::render::DepthCameraProperties, bool>(),
+            py::arg("name"), py::arg("p_WB_W"), py::arg("rpy_WB_W"),
+            py::arg("properties"), py::arg("show_window") = false)
+        .def("color_camera_info", &RgbdCamera::color_camera_info,
+            py_reference_internal, doc.RgbdCamera.color_camera_info.doc)
+        .def("depth_camera_info", &RgbdCamera::depth_camera_info,
+            py_reference_internal, doc.RgbdCamera.depth_camera_info.doc)
+        .def("color_camera_optical_pose", &RgbdCamera::color_camera_optical_pose,
+            doc.RgbdCamera.color_camera_optical_pose.doc)
+        .def("depth_camera_optical_pose", &RgbdCamera::depth_camera_optical_pose,
+            doc.RgbdCamera.depth_camera_optical_pose.doc)
+        .def("query_object_input_port", &RgbdCamera::query_object_input_port, py_reference_internal)
+            //doc.RgbdCamera.query_object_input_port.doc) won't compile, not sure why
+        .def("color_image_output_port", &RgbdCamera::color_image_output_port, py_reference_internal,
+            doc.RgbdCamera.color_image_output_port.doc)
+        .def("depth_image_output_port", &RgbdCamera::depth_image_output_port, py_reference_internal,
+            doc.RgbdCamera.depth_image_output_port.doc)
+        .def("label_image_output_port", &RgbdCamera::label_image_output_port, py_reference_internal,
+            doc.RgbdCamera.label_image_output_port.doc);
+  }
   {
     constexpr auto& cls_doc = doc.ImageToLcmImageArrayT;
     using Class = ImageToLcmImageArrayT;
