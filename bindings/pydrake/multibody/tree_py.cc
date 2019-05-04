@@ -203,6 +203,9 @@ PYBIND11_MODULE(tree, m) {
         .def("set_translation_rate", &Class::set_translation_rate,
             py::arg("context"), py::arg("translation_dot"),
             cls_doc.set_translation_rate.doc)
+        .def("set_default_translation",
+            &Class::set_default_translation, py::arg("translation"),
+            cls_doc.set_default_translation.doc)
         .def("set_random_translation_distribution",
             &Class::set_random_translation_distribution, py::arg("translation"),
             cls_doc.set_random_translation_distribution.doc);
@@ -222,6 +225,9 @@ PYBIND11_MODULE(tree, m) {
             cls_doc.get_angle.doc)
         .def("set_angle", &Class::set_angle, py::arg("context"),
             py::arg("angle"), cls_doc.set_angle.doc)
+        .def("set_default_angle",
+            &Class::set_default_angle, py::arg("angle"),
+            cls_doc.set_default_angle.doc)
         .def("set_random_angle_distribution",
             &Class::set_random_angle_distribution, py::arg("angle"),
             cls_doc.set_random_angle_distribution.doc);

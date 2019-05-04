@@ -439,6 +439,8 @@ struct Impl {
             overload_cast_explicit<unique_ptr<DiscreteValues<T>>>(
                 &System<T>::AllocateDiscreteVariables),
             doc.System.AllocateDiscreteVariables.doc)
+        .def("SetRandomContext", &System<T>::SetRandomContext,
+             doc.System.SetRandomContext.doc)
         .def("EvalVectorInput",
             [](const System<T>* self, const Context<T>& arg1, int arg2) {
               return self->EvalVectorInput(arg1, arg2);
@@ -785,6 +787,10 @@ Note: The above is for the C++ documentation. For Python, use
     DefineTemplateClassWithDefault<Diagram<T>, PyDiagram, System<T>>(
         m, "Diagram", GetPyParam<T>(), doc.Diagram.doc)
         .def(py::init<>(), doc.Diagram.ctor.doc_0args)
+        .def("GetSubsystemByName", &Diagram<T>::GetSubsystemByName,
+            py_reference,
+            // Keep alive, ownership: `return` keeps `Context` alive.
+            py::keep_alive<0, 2>(), doc.Diagram.GetSubsystemByName.doc)
         .def("GetMutableSubsystemState",
             overload_cast_explicit<State<T>&, const System<T>&, Context<T>*>(
                 &Diagram<T>::GetMutableSubsystemState),
