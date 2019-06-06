@@ -264,11 +264,98 @@ PYBIND11_MODULE(tree, m) {
         .def("joint", &Class::joint, py_reference_internal, cls_doc.joint.doc);
   }
 
+  {
+    using Class = multibody::internal::PositionKinematicsCache<T>;
+    constexpr auto& cls_doc = doc.internal.PositionKinematicsCache;
+    py::class_<Class>(m, "PositionKinematicsCache", cls_doc.doc)
+        .def("get_X_WB", &Class::get_X_WB, py::arg("body_node_index"),
+            cls_doc.get_X_WB.doc);
+  }
+  {
+    using Class = multibody::internal::VelocityKinematicsCache<T>;
+    constexpr auto& cls_doc = doc.internal.VelocityKinematicsCache;
+    py::class_<Class>(m, "VelocityKinematicsCache", cls_doc.doc);
+  }
+
   // Force Elements.
   {
+    // pybind11 trampoline class to permit overriding virtual functions in
+    // Python.
+    class PyForceElement : public py::wrapper<ForceElement<T>> {
+     public:
+      using Base = py::wrapper<ForceElement<T>>;
+      PyForceElement(ModelInstanceIndex model_instance)
+          : Base(model_instance) {}
+
+      // The following methods are for the pybind11 trampoline class to permit
+      // C++ to call the correct Python override. This code path is only
+      // activated for Python implementations of the class (whose inheritance
+      // will pass through `PyForceElement`). C++ implementations will
+      // use the bindings on the interface below.
+
+      T CalcPotentialEnergy(const systems::Context<T>& context,
+          const multibody::internal::PositionKinematicsCache<T>& pc)
+          const override {
+        PYBIND11_OVERLOAD_PURE(
+            T, ForceElement, CalcPotentialEnergy, context, pc);
+      }
+
+      T CalcConservativePower(const systems::Context<T>& context,
+          const multibody::internal::PositionKinematicsCache<T>& pc,
+          const multibody::internal::VelocityKinematicsCache<T>& vc)
+          const override {
+        PYBIND11_OVERLOAD_PURE(
+            T, ForceElement, CalcConservativePower, context, pc, vc);
+      }
+
+      T CalcNonConservativePower(const systems::Context<T>& context,
+          const multibody::internal::PositionKinematicsCache<T>& pc,
+          const multibody::internal::VelocityKinematicsCache<T>& vc)
+          const override {
+        PYBIND11_OVERLOAD_PURE(
+            T, ForceElement, CalcNonConservativePower, context, pc, vc);
+      }
+
+     private:
+      void DoCalcAndAddForceContribution(const systems::Context<T>& context,
+          const multibody::internal::PositionKinematicsCache<T>& pc,
+          const multibody::internal::VelocityKinematicsCache<T>& vc,
+          MultibodyForces<T>* forces) const override {
+        PYBIND11_OVERLOAD_PURE(void, ForceElement,
+            DoCalcAndAddForceContribution, context, pc, vc, forces);
+      }
+
+      std::unique_ptr<ForceElement<double>> DoCloneToScalar(
+          const multibody::internal::MultibodyTree<double>& tree_clone)
+          const override {
+        PYBIND11_OVERLOAD_PURE(std::unique_ptr<ForceElement<double>>,
+            ForceElement, DoCloneToScalar, tree_clone);
+      };
+
+      /// Clones this %ForceElement (templated on T) to a mobilizer templated on
+      /// AutoDiffXd.
+      std::unique_ptr<ForceElement<AutoDiffXd>> DoCloneToScalar(
+          const multibody::internal::MultibodyTree<AutoDiffXd>& tree_clone)
+          const override {
+        PYBIND11_OVERLOAD_PURE(std::unique_ptr<ForceElement<AutoDiffXd>>,
+            ForceElement, DoCloneToScalar, tree_clone);
+      };
+
+      std::unique_ptr<ForceElement<symbolic::Expression>> DoCloneToScalar(
+          const multibody::internal::MultibodyTree<symbolic::Expression>&
+              tree_clone) const override {
+        PYBIND11_OVERLOAD_PURE(
+            std::unique_ptr<ForceElement<symbolic::Expression>>, ForceElement,
+            DoCloneToScalar, tree_clone);
+      };
+    };
+
     using Class = ForceElement<T>;
     constexpr auto& cls_doc = doc.ForceElement;
-    py::class_<Class> cls(m, "ForceElement", cls_doc.doc);
+    py::class_<Class, PyForceElement> cls(m, "ForceElement", cls_doc.doc);
+    cls  // BR
+        .def(py::init<ModelInstanceIndex>(), py::arg("model_instance"),
+            cls_doc.ctor.doc);
     BindMultibodyTreeElementMixin(&cls);
   }
 
