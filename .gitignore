@@ -26,3 +26,6 @@
 
 # User-specified configuration
 /user.bazelrc
+
+# Python bytecode
+*.pyc
