@@ -252,21 +252,32 @@ PYBIND11_MODULE(geometry, m) {
   {
     py::class_<Shape>(m, "Shape", doc.Shape.doc);
     py::class_<Sphere, Shape>(m, "Sphere", doc.Sphere.doc)
-        .def(py::init<double>(), py::arg("radius"), doc.Sphere.ctor.doc);
+        .def(py::init<double>(), py::arg("radius"), doc.Sphere.ctor.doc)
+        .def("get_radius", &Sphere::get_radius, doc.Sphere.get_radius.doc);
     py::class_<Cylinder, Shape>(m, "Cylinder", doc.Cylinder.doc)
         .def(py::init<double, double>(), py::arg("radius"), py::arg("length"),
-            doc.Cylinder.ctor.doc);
+            doc.Cylinder.ctor.doc)
+        .def("get_radius", &Cylinder::get_radius, doc.Cylinder.get_radius.doc)
+        .def("get_length", &Cylinder::get_length, doc.Cylinder.get_length.doc);
     py::class_<Box, Shape>(m, "Box", doc.Box.doc)
         .def(py::init<double, double, double>(), py::arg("width"),
-            py::arg("depth"), py::arg("height"), doc.Box.ctor.doc);
+            py::arg("depth"), py::arg("height"), doc.Box.ctor.doc)
+        .def("width", &Box::width, doc.Box.width.doc)
+        .def("depth", &Box::width, doc.Box.depth.doc)
+        .def("height", &Box::width, doc.Box.height.doc)
+        .def("size", &Box::size, doc.Box.size.doc);
     py::class_<HalfSpace, Shape>(m, "HalfSpace", doc.HalfSpace.doc)
         .def(py::init<>(), doc.HalfSpace.ctor.doc);
     py::class_<Mesh, Shape>(m, "Mesh", doc.Mesh.doc)
         .def(py::init<std::string, double>(), py::arg("absolute_filename"),
-            py::arg("scale") = 1.0, doc.Mesh.ctor.doc);
+            py::arg("scale") = 1.0, doc.Mesh.ctor.doc)
+        .def("filename", &Mesh::filename, doc.Mesh.filename.doc)
+        .def("scale", &Mesh::scale, doc.Mesh.scale.doc);
     py::class_<Convex, Shape>(m, "Convex", doc.Convex.doc)
         .def(py::init<std::string, double>(), py::arg("absolute_filename"),
-            py::arg("scale") = 1.0, doc.Convex.ctor.doc);
+            py::arg("scale") = 1.0, doc.Convex.ctor.doc)
+        .def("filename", &Convex::filename, doc.Convex.filename.doc)
+        .def("scale", &Convex::scale, doc.Convex.scale.doc);
   }
 }
 
