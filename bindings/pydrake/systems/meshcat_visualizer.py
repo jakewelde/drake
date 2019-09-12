@@ -36,7 +36,7 @@ import meshcat.transformations as tf  # noqa
 _DEFAULT_PUBLISH_PERIOD = 1 / 30.
 
 
-def _convert_mesh(geom):
+def _convert_mesh(geom, global_alpha_multiplier):
     # Given a LCM geometry message, forms a meshcat geometry and material
     # for that geometry, as well as a local tf to the meshcat geometry
     # that matches the LCM geometry.
@@ -92,7 +92,8 @@ def _convert_mesh(geom):
             material = meshcat.geometry.MeshLambertMaterial(
                 map=meshcat.geometry.ImageTexture(
                     image=meshcat.geometry.PngImage.from_file(
-                        candidate_texture_path_png)))
+                        candidate_texture_path_png)),
+                opacity=global_alpha_multiplier)
     else:
         print("UNSUPPORTED GEOMETRY TYPE {} IGNORED".format(
               geom.type))
@@ -108,10 +109,11 @@ def _convert_mesh(geom):
             for i in range(3):
                 val += (256**(2 - i)) * int(255 * rgb[i])
             return val
+        opacity = geom.color[3]*global_alpha_multiplier
         material = meshcat.geometry.MeshLambertMaterial(
             color=rgb_2_hex(geom.color[:3]),
-            transparent=geom.color[3] != 1.,
-            opacity=geom.color[3])
+            transparent=opacity != 1.,
+            opacity=opacity)
     return meshcat_geom, material, element_local_tf
 
 
@@ -204,7 +206,8 @@ class MeshcatVisualizer(LeafSystem):
                  frames_to_draw={},
                  frames_opacity=1.,
                  axis_length=0.15,
-                 axis_radius=0.006):
+                 axis_radius=0.006,
+                 global_alpha_multiplier=1.0):
         """
         Args:
             scene_graph: A SceneGraph object.
@@ -232,6 +235,8 @@ class MeshcatVisualizer(LeafSystem):
                     {"1": {"A", "B"}}.
             frames_opacity, axis_length and axis_radius are the opacity, length
                 and radius of the coordinate axes to be drawn.
+            global_alpha_multiplier: Multiplies all material alpha quantities.
+
         Note:
             This call will not return until it connects to the
             ``meshcat-server``.
@@ -241,6 +246,7 @@ class MeshcatVisualizer(LeafSystem):
         self.set_name('meshcat_visualizer')
         self.DeclarePeriodicPublish(draw_period, 0.0)
         self.draw_period = draw_period
+        self.global_alpha_multiplier = global_alpha_multiplier
 
         # Pose bundle (from SceneGraph) input port.
         # TODO(tehbelinda): Rename the `lcm_visualization` port to match
@@ -325,7 +331,7 @@ class MeshcatVisualizer(LeafSystem):
                 if geom.color[3] == 0:
                     continue
 
-                meshcat_geom, material, element_local_tf = _convert_mesh(geom)
+                meshcat_geom, material, element_local_tf = _convert_mesh(geom, self.global_alpha_multiplier)
                 if meshcat_geom is not None:
                     cur_vis = (
                         self.vis[self.prefix][source_name][str(link.robot_num)]
