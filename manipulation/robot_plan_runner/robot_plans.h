@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -19,12 +20,12 @@ struct PlanData {
   // plan signature can be 1,2,3 (as in the case of running simulations)
   // or timestamp (as in the case of receiving LCM messages).
   long plan_signature{-1};
-  optional<trajectories::PiecewisePolynomial<double>> joint_traj;
+  std::optional<trajectories::PiecewisePolynomial<double>> joint_traj;
   struct EeData {
     trajectories::PiecewisePolynomial<double> ee_xyz_traj;
     trajectories::PiecewiseQuaternionSlerp<double> ee_quat_traj;
   };
-  optional<EeData> ee_traj;
+  std::optional<EeData> ee_traj;
 };
 
 class PlanBase {
